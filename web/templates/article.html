@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="{{.Site.Lang}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{.Article.Subject}} - {{.Site.Title}}</title>
+<meta name="description" content="{{excerpt .Article.Body 160}}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="{{.Article.Subject}} - {{.Site.Title}}">
+<meta property="og:description" content="{{excerpt .Article.Body 160}}">
+<meta property="og:url" content="{{.Scheme}}://{{.Host}}/{{if .Article.Slug}}{{.Article.Slug}}{{else}}{{.Article.UniqueID}}{{end}}">
+{{if .Article.Banner}}<meta property="og:image" content="{{.Scheme}}://{{.Host}}/{{if .Article.Slug}}{{.Article.Slug}}{{else}}{{.Article.UniqueID}}{{end}}/{{.Article.Banner}}">{{end}}
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{{.Article.Subject}}">
+<meta name="twitter:description" content="{{excerpt .Article.Body 160}}">
+{{if .Article.Banner}}<meta name="twitter:image" content="{{.Scheme}}://{{.Host}}/{{if .Article.Slug}}{{.Article.Slug}}{{else}}{{.Article.UniqueID}}{{end}}/{{.Article.Banner}}">{{end}}
+<meta name="email-local" content="{{.EmailLocal}}">
+<meta name="email-domain" content="{{.EmailDomain}}">
+<base href="/{{if .Article.Slug}}{{.Article.Slug}}{{else}}{{.Article.UniqueID}}{{end}}/">
+<link rel="icon" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/style.css">
+<style>.container{max-width:{{.Site.Width}}px}</style>
+</head>
+<body>
+<div class="container">
+<header class="header">
+  <div class="header-banner-area">
+  {{if .Site.Avatar}}<img src="{{.Site.Avatar}}" alt="" class="avatar-banner"{{if .Article.Banner}} style="display:none"{{end}}>{{end}}
+  {{if .Article.Banner}}<a href="/{{if .Article.Slug}}{{.Article.Slug}}{{else}}{{.Article.UniqueID}}{{end}}/{{.Article.Banner}}" target="_blank" rel="noopener"><img src="/{{if .Article.Slug}}{{.Article.Slug}}{{else}}{{.Article.UniqueID}}{{end}}/{{.Article.Banner}}" alt="" class="avatar-banner"></a>{{end}}
+  </div>
+  <h1><a href="/">{{.Site.Title}}</a></h1>
+  {{if .Site.Subtitle}}<p class="subtitle">{{.Site.Subtitle}}</p>{{end}}
+  {{if .Site.Links}}<nav class="nav-links">{{range .Site.Links}}<a href="{{.URL}}">{{.Title}}</a>{{end}}</nav>{{end}}
+</header>
+
+<main>
+  <article class="article-full">
+    <h2 class="article-subject">{{.Article.Subject}}</h2>
+    <div class="article-meta-bar">
+      <span class="author" title="{{authorTooltip .Article.AuthorHash .Article.AuthorEmail}}">{{.Article.Author}}</span>
+      <time class="date" datetime="{{datetimeISO .Article}}" title="{{fmtDateTitle .Article}}">{{fmtDate .Article}}</time>
+      <a href="/{{if .Article.Slug}}{{.Article.Slug}}{{else}}{{.Article.UniqueID}}{{end}}" class="uid" title="permalink" data-address="/{{if .Article.Slug}}{{.Article.Slug}}{{else}}{{.Article.UniqueID}}{{end}}">#{{.Article.UniqueID}}</a>
+    </div>
+    <div class="article-body">
+      {{renderMD .Article.Body}}
+    </div>
+    {{if .UnreferencedImages}}
+    <div class="attachments-section">
+      <hr>
+      <h4 class="attachments-title">Attachments</h4>
+      <div class="img-tiles">
+        {{range .UnreferencedImages}}
+        <a href="/{{if $.Article.Slug}}{{$.Article.Slug}}{{else}}{{$.Article.UniqueID}}{{end}}/{{.}}" target="_blank" rel="noopener"><img src="/{{if $.Article.Slug}}{{$.Article.Slug}}{{else}}{{$.Article.UniqueID}}{{end}}/{{.}}" width="150" height="150" loading="lazy"></a>
+        {{end}}
+      </div>
+    </div>
+    {{end}}
+  </article>
+
+  <section class="comments-section">
+    <h3>Comments ({{len .Comments}})
+      <a href="{{mailto .Article.UniqueID .Article.Subject .EmailLocal .EmailDomain .Article.Body .Article.Author (fmtDate .Article) .Article.UniqueID .Article.AuthorHash false}}" class="reply-link">[reply]</a>
+      <a href="#" class="copy-link" data-address="{{.EmailLocal}}+{{.Article.UniqueID}}@{{.EmailDomain}}">[copy reply address]</a>
+    </h3>
+    {{range .Comments}}
+    <div id="c-{{.Comment.UniqueID}}" class="comment {{if eq .Depth 1}}comment-reply{{end}} {{if .Comment.Deleted}}comment-deleted{{end}}">
+      <div class="comment-header">
+        <span class="author" title="{{authorTooltip .Comment.AuthorHash .Comment.AuthorEmail}}">{{.Comment.Author}}</span>
+        <time class="date" datetime="{{datetimeISO .Comment}}" title="{{fmtDateTitle .Comment}}">{{fmtDate .Comment}}</time>
+        <a href="/{{if $.Article.Slug}}{{$.Article.Slug}}{{else}}{{$.Article.UniqueID}}{{end}}#c-{{.Comment.UniqueID}}" class="uid" title="permalink" data-address="/{{if $.Article.Slug}}{{$.Article.Slug}}{{else}}{{$.Article.UniqueID}}{{end}}#c-{{.Comment.UniqueID}}">#{{.Comment.UniqueID}}</a>
+        {{if not .Comment.Deleted}}
+        <a href="{{mailto .Comment.UniqueID $.Article.Subject $.EmailLocal $.EmailDomain .Comment.Body .Comment.Author (fmtDate .Comment) .Comment.UniqueID .Comment.AuthorHash true}}" class="reply-link">[reply]</a>
+        <a href="#" class="copy-link" data-address="{{$.EmailLocal}}+{{.Comment.UniqueID}}@{{$.EmailDomain}}">[copy reply address]</a>
+        {{end}}
+      </div>
+      {{if .ReplyTarget}}
+      <div class="reply-to-info">&#x21b3; <a href="#c-{{.Comment.ReplyTo}}" class="reply-target-link">{{.ReplyTarget}}</a> <a href="#c-{{.Comment.ReplyTo}}" class="reply-target-link uid">#{{.Comment.ReplyTo}}</a></div>
+      {{end}}
+      {{if .Comment.Deleted}}
+      <div class="comment-body comment-deleted-body"><em>[已删除]</em></div>
+      {{else}}
+      <div class="comment-body">
+        {{renderPlaintext .Comment.Body}}
+      </div>
+      {{end}}
+      {{if and $.CommentVisible .Comment.Edits}}
+      <details class="comment-edits">
+        <summary>Edit history ({{len .Comment.Edits}})</summary>
+        {{range .Comment.Edits}}
+        <div class="edit-entry">
+          <time datetime="{{datetimeISO .}}">{{fmtDate .}}</time>
+          <div class="edit-body">{{renderPlaintext .Body}}</div>
+        </div>
+        {{end}}
+      </details>
+      {{end}}
+      {{ $imgs := commentImages $.Article.UniqueID .Comment.UniqueID }}
+      {{if $imgs}}
+      <div class="comment-images">
+        {{range $imgs}}
+        <a href="{{.}}" target="_blank" rel="noopener">{{.}}</a>
+        {{end}}
+      </div>
+      {{end}}
+    </div>
+    {{end}}
+     {{if not .Comments}}
+    <p class="empty">No comments yet.</p>
+    {{end}}
+    <p class="notify-hint">Send <code>settings</code> in email subject to configure your notification preferences.</p>
+  </section>
+</main>
+
+<footer class="footer">
+  <p><a href="/">&larr; Back to index</a></p>
+  {{if .Site.FooterHTML}}{{rawHTML .Site.FooterHTML}}{{end}}
+</footer>
+</div>
+<script src="/static/spa.js"></script>
+</body>
+</html>

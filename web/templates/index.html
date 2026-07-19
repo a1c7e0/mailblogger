@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="{{.Site.Lang}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{.Site.Title}}</title>
+{{if .Site.Description}}<meta name="description" content="{{.Site.Description}}">{{end}}
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{.Site.Title}}">
+{{if .Site.Description}}<meta property="og:description" content="{{.Site.Description}}">{{end}}
+<meta property="og:url" content="{{.Scheme}}://{{.Host}}/">
+{{if .Site.Avatar}}<meta property="og:image" content="{{.Scheme}}://{{.Host}}{{.Site.Avatar}}">{{end}}
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{{.Site.Title}}">
+{{if .Site.Description}}<meta name="twitter:description" content="{{.Site.Description}}">{{end}}
+{{if .Site.Avatar}}<meta name="twitter:image" content="{{.Scheme}}://{{.Host}}{{.Site.Avatar}}">{{end}}
+<meta name="email-local" content="{{.EmailLocal}}">
+<meta name="email-domain" content="{{.EmailDomain}}">
+<link rel="icon" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/style.css">
+<style>.container{max-width:{{.Site.Width}}px}</style>
+</head>
+<body>
+<div class="container">
+<header class="header">
+  <div class="header-banner-area">
+  {{if .Site.Avatar}}<img src="{{.Site.Avatar}}" alt="" class="avatar-banner">{{end}}
+  </div>
+  <h1><a href="/">{{.Site.Title}}</a></h1>
+  {{if .Site.Subtitle}}<p class="subtitle">{{.Site.Subtitle}}</p>{{end}}
+  {{if .Site.Links}}<nav class="nav-links">{{range .Site.Links}}<a href="{{.URL}}">{{.Title}}</a>{{end}}</nav>{{end}}
+</header>
+
+<main>
+  <table class="article-list">
+    <tbody>
+    {{range .Articles}}
+    <tr>
+      <td class="article-date" title="{{fmtDateTitle .Date}}"><time datetime="{{datetimeISO .Date}}" data-format="date">{{.Date.UTC.Format "2006-01-02"}}</time></td>
+      <td class="article-info">
+        <a href="/{{if .Slug}}{{.Slug}}{{else}}{{.UniqueID}}{{end}}" class="article-link">{{.Subject}}</a>
+        <span class="article-meta">
+          {{if $.Site.ShowAuthor}}<span class="author" title="{{authorTooltip .AuthorHash .AuthorEmail}}">{{.Author}}</span>{{end}}
+          <a href="#" class="uid" data-address="/{{if .Slug}}{{.Slug}}{{else}}{{.UniqueID}}{{end}}">#{{.UniqueID}}</a>
+        </span>
+      </td>
+    </tr>
+    {{end}}
+    {{if not .Articles}}
+    <tr><td colspan="2" class="empty">No articles yet. Send an email to <a href="mailto:{{.EmailLocal}}@{{.EmailDomain}}">{{.EmailLocal}}@{{.EmailDomain}}</a> to start blogging.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+</main>
+
+<footer class="footer">
+  {{if .TotalPages}}
+  <div class="pagination">
+    {{if .HasPrev}}<a href="?page={{.PrevPage}}">&larr; Newer</a>{{end}}
+    <span>Page {{.Page}} of {{.TotalPages}}</span>
+    {{if .HasNext}}<a href="?page={{.NextPage}}">Older &rarr;</a>{{end}}
+  </div>
+  {{end}}
+  {{if .Site.FooterHTML}}{{rawHTML .Site.FooterHTML}}{{end}}
+</footer>
+</div>
+<script src="/static/spa.js"></script>
+</body>
+</html>

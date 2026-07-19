@@ -1,0 +1,42 @@
+mail:
+  address: blog@example.com
+  imap:
+    server: imap.example.com
+    port: 993
+    username: blog@example.com
+    password: your-password
+  smtp:
+    server: smtp.example.com
+    port: 465
+    # username and password fall back to imap if not set
+  whitelist:
+    - "*@example.com"
+  notify:
+    article: true
+    comment: false
+
+content_dir: content
+
+site:
+  title: My Blog
+  subtitle: ""
+  description: ""
+  lang: en
+  footer_html: ""
+  show_author: true
+  links:
+    - title: About
+      url: /about
+
+web:
+  port: 8080
+  host: 0.0.0.0
+  scheme: https
+
+privacy:
+  hide_email: true
+
+# Cloudflare Email Worker webhook secret
+# Set the same value in your Worker's environment variables
+webhook:
+  secret: "your-webhook-secret-here"

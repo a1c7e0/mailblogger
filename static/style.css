@@ -1,0 +1,83 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0; padding: 0;
+  font-family: "DejaVu Sans Mono", "Liberation Mono", Menlo, Consolas, monospace;
+  font-size: 14px; line-height: 1.55;
+  color: #222; background: #fff;
+}
+
+a { color: #2060a0; text-decoration: none; }
+a:hover { text-decoration: underline; color: #104080; }
+
+.container { margin: 0; padding: 16px 24px 32px; max-width: 600px; }
+
+/* Header */
+.header { padding-bottom: 8px; margin-bottom: 16px; border-bottom: 1px solid #ccc; }
+.header-banner-area { margin: -16px -24px 8px; }
+.avatar-banner { display: block; width: 100%; max-width: 100%; border-radius: 0; }
+.header h1 { font-size: 20px; margin: 8px 0; }
+.header h1 a { color: #222; }
+.subtitle { color: #666; margin: 0 0 8px; font-size: 13px; }
+.nav-links { font-size: 13px; }
+.nav-links a { margin-right: 12px; }
+
+/* Article list */
+.article-summary { padding: 12px 0; border-bottom: 1px solid #eee; }
+.article-summary:last-child { border-bottom: none; }
+.article-summary h2 { font-size: 16px; margin: 0 0 4px; }
+.article-link { color: #1a5c8a; font-weight: 600; }
+.article-link:hover { color: #10446b; }
+.article-meta { font-size: 12px; color: #888; }
+.article-meta .author { margin-right: 8px; }
+.excerpt { color: #555; font-size: 13px; margin: 4px 0 0; }
+
+/* Article full */
+.article-full { margin-bottom: 24px; }
+.article-subject { font-size: 20px; margin: 0 0 8px; }
+.article-meta-bar { font-size: 12px; color: #888; margin-bottom: 12px; }
+.article-meta-bar > * + * { margin-left: 0.5em; }
+.article-meta-bar .uid { color: #aaa; }
+.article-body { line-height: 1.7; }
+.article-body p { margin: 0 0 0.8em; }
+.article-body h1, .article-body h2, .article-body h3 { margin: 1.2em 0 0.4em; }
+.article-body hr { border: none; border-top: 1px solid #ddd; margin: 1.5em 0; }
+.article-body blockquote { border-left: 2px solid #ddd; margin: 0 0 0.8em; padding: 2px 0 2px 12px; color: #555; }
+.article-body code { background: #f0f0f0; padding: 1px 4px; font-size: 0.9em; }
+.article-body pre { background: #f5f5f5; border: 1px solid #e0e0e0; padding: 8px 12px; overflow-x: auto; }
+.article-body figure { margin: 1em 0; }
+.article-body figure img { max-width: 100%; height: auto; }
+
+/* Attachments */
+.attachments-section { margin-top: 16px; }
+.attachments-title { font-size: 14px; margin: 8px 0; }
+.img-tiles { display: flex; flex-wrap: wrap; gap: 4px; }
+.img-tiles a { display: block; line-height: 0; }
+.img-tiles img { width: 100%; height: 150px; object-fit: cover; display: block; }
+
+/* Comments */
+.comments-section { border-top: 2px solid #222; padding-top: 12px; margin-top: 20px; }
+.comments-section h3 { font-size: 16px; margin: 0 0 12px; color: #222; }
+.comment { padding: 10px 0; border-bottom: 1px solid #eee; }
+.comment:last-child { border-bottom: none; }
+.comment-header { font-size: 13px; color: #555; margin-bottom: 4px; }
+.comment-header > * + * { margin-left: 0.5em; }
+.comment-header .uid { color: #aaa; }
+.reply-link, .copy-link { font-size: 12px; color: #2060a0; cursor: pointer; }
+.comment-reply { margin-left: 28px; border-left: 2px solid #ccc; padding-left: 14px; }
+.reply-to-info { font-size: 12px; color: #888; margin-bottom: 4px; }
+.reply-to-info a { color: #2060a0; }
+.comment-body { font-size: 14px; }
+.comment-deleted { opacity: 0.6; }
+.comment-deleted-body { color: #999; font-style: italic; }
+.comment-edits { margin-top: 8px; font-size: 12px; color: #666; }
+.comment-edits summary { cursor: pointer; color: #888; }
+.comment-edits .edit-entry { padding: 4px 0; border-top: 1px dashed #ddd; }
+.comment-edits .edit-body { margin-top: 2px; color: #777; }
+.notify-hint { font-size: 12px; color: #999; margin-top: 16px; }
+.notify-hint code { background: #f0f0f0; padding: 1px 4px; }
+.empty { color: #999; font-style: italic; }
+
+/* Footer */
+.footer { border-top: 1px solid #eee; padding-top: 12px; margin-top: 24px; font-size: 12px; color: #999; }
+.footer a { color: #888; }

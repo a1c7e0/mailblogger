@@ -1,0 +1,6 @@
+content/
+.git/
+tools/
+*.log
+docs/
+mailblogger

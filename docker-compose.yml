@@ -1,0 +1,9 @@
+services:
+  mailblogger:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./content:/app/content
+      - ./config.yaml:/app/config.yaml:ro
+    restart: unless-stopped
