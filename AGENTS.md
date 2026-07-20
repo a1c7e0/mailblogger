@@ -22,7 +22,7 @@ Full agent documentation in `docs/`. Read these before modifying any module:
 | `docs/content-storage.md` | Frontmatter format, file layout, store API |
 | `docs/email-processing.md` | IMAP client, processor flow, DKIM, polling, notification |
 | `docs/smtp.md` | SMTP sender, notification email format, test tool |
-| `docs/web-server.md` | HTTP handlers, goldmark, templates, graceful shutdown, API |
+| `docs/web-server.md` | HTTP handlers, rendering, SPA, API, feed, settings |
 | `docs/comment-threading.md` | Threading model, reply routing, notification chain |
 | `docs/uniqueids.md` | Hash generation, author hashing, display names |
 | `docs/privacy.md` | Email hiding, frontend data exposure |
@@ -30,18 +30,41 @@ Full agent documentation in `docs/`. Read these before modifying any module:
 | `docs/deployment.md` | Docker, ports, signals, production notes |
 | `docs/testing.md` | Manual test flow, API endpoints, sendmail tool |
 | `docs/webhook.md` | Cloudflare Email Worker webhook, raw email endpoint |
+| `docs/api.md` | JSON API endpoints, request/response formats |
+| `docs/themes.md` | Theme system, locale files, creating custom themes |
 
 ## Project Architecture
 
 ```
-config/     -> YAML config loading (config.yaml at repo root)
-blog/       -> domain models (Article, Comment), SHA256-hash unique IDs, filesystem store, sync.Once cache, SQLite metadata
-email/      -> IMAP client, SMTP sender, email body extraction, process logic (article/command/comment/settings dispatch), DKIM
-web/        -> HTTP server, goldmark md->html, Atom feeds, API endpoints, settings page, go:embed templates
-static/     -> CSS served from filesystem
-tools/      -> sendmail helper for testing (SMTP send)
-content/    -> generated output directory (articles as folders with index.md + comments.md)
-docs/       -> per-module agent documentation
+main.go             → CLI entry point, fetch/serve, signal handling, config watcher
+config/config.go    → YAML config loading, defaults, address parsing
+blog/
+  article.go        → Article, Comment, CommentEdit structs
+  uniqueid.go       → SHA256 hash generation for IDs and author linking
+  store.go          → Filesystem storage, sync.Once cache, filtered comment queries
+  store_sql.go      → SQLite metadata (tokens, user prefs, watchers/muters)
+email/
+  imap.go           → IMAP client, MIME parsing, parseBodyParts, htmlToMarkdown
+  smtp.go           → SMTP sender (implicit TLS, port 465)
+  processor.go      → Processor struct, ProcessMessage dispatch, config parsing
+  processor_article.go → Article create/edit/delete lifecycle
+  processor_comment.go → Comment create/edit/delete lifecycle
+  processor_notify.go  → Notification emails, ancestor threading, quoted replies
+  poller.go         → IMAP Poller with backoff, FetchOnce
+  images.go         → Image extraction, WebP conversion, CID replacement
+  dkim.go           → DKIM signature verification via DNS
+web/
+  server.go         → HTTP routing, handlers, SPA, settings page
+  render.go         → Markdown→HTML, image wrapping, date formatting, mailto links
+  assets.go         → Favicon/avatar detection, ICO generation
+  api.go            → REST API: POST article/comment, GET site/articles/status, raw-email webhook
+  feed.go           → Atom feed generation with 5min cache
+  sitemap.go        → XML sitemap generation
+static/             → CSS and JS (spa.js for client-side navigation)
+themes/             → Custom theme directory (SPA entry points)
+tools/sendmail.go   → SMTP test tool for development
+content/            → Generated output (articles, comments, images, SQLite DB)
+docs/               → Per-module agent documentation
 ```
 
 ## Dependencies
@@ -53,7 +76,7 @@ docs/       -> per-module agent documentation
 | `gopkg.in/yaml.v3` | v3.0.1 | Config load, frontmatter marshal/unmarshal |
 | `github.com/fsnotify/fsnotify` | v1.10.1 | Config file change detection |
 | `modernc.org/sqlite` | v1.53.0 | SQLite metadata (tokens, user prefs, article watchers/muters) |
-| `github.com/chai2010/webp` | v1.4.0 | Image → webp encoding (CGo, requires libwebp) |
+| `github.com/chai2010/webp` | v1.4.0 | Image → WebP encoding (CGo, requires libwebp) |
 | `golang.org/x/image` | v0.44.0 | Image scaling (draw.NearestNeighbor for ICO generation) |
 
 No external web framework — `net/http` + `html/template`.
@@ -66,13 +89,20 @@ Two-tier architecture:
 
 SQLite does NOT store article/comment content. Filesystem is the source of truth for content.
 
+## JSON API
+
+Read-only JSON API endpoints:
+- `GET /api/site` — site information
+- `GET /api/articles` — all articles
+- `GET /api/article/{id}` — article detail (by hash or slug)
+- `GET /api/article/{id}/comments` — article comments
+- `GET /api/status` — server status
+
 ## Testing
 
 ```bash
-go test ./...                     # run all unit tests
+go test ./...                     # run all unit tests (109)
 go test ./blog/...                # blog package tests
 go test ./email/...               # email package tests
 go test ./web/...                 # web package tests (includes API tests)
 ```
-
-109 unit tests covering: parseFrontmatter, splitCommentBlocks, cleanSubject, matchPattern, parseNotifyTag, htmlToMarkdown, parseBodyConfig, API endpoints, ParseRawEmail, webhook auth, and more.

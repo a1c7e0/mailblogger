@@ -1,53 +1,40 @@
 # Privacy & Email Exposure
 
-## Design Principle
+## Design
 
-Sender email addresses are stored in backend frontmatter (`author_email`) and SQLite, but their visibility in the frontend is controlled by per-user and global settings.
+Sender emails stored in frontmatter (`author_email`) and SQLite. Frontend visibility controlled by per-user and global settings.
 
-## Email Visibility Control
+## Visibility Control
 
-Two levels of control:
-1. **Global default**: `privacy.hide_email` in config (default: `true`)
-2. **Per-user override**: `hide_email` in user preferences (configured via settings page)
+1. **Global**: `privacy.hide_email` in config (default: `true`)
+2. **Per-user**: `hide_email` in user prefs (via settings page)
 
-Priority: per-user preference > global default.
+Per-user overrides global.
 
-## What the Frontend Shows
+## Frontend Behavior
 
 | Element | hide_email=true | hide_email=false |
 |---|---|---|
-| Author span | Display name | Display name |
-| Author tooltip | `hash: abc12345` | `alice@example.com` + `hash: abc12345` (two lines) |
-| Reply link | `mailto:<mailbox>+<uid>@domain` | Same (blog's address) |
-| Copy button | `<mailbox>+<uid>@domain` | Same (blog's address) |
+| Author tooltip | `hash: abc12345` | `alice@example.com\nhash: abc12345` |
+| Reply/copy links | Blog's address | Blog's address (same) |
 
-## What the Backend Stores
+## Backend Storage
 
-`index.md` and `comments.md` frontmatter both include `author_email` for:
-- Admin reference
+`author_email` in frontmatter and SQLite for:
 - Notification sending (SMTP)
-- Article management authorization (matching sender == article author)
-- Hash forwarding (contact author via `blog+hash@domain`)
-
-## Author Identity
-
-- Same email → same `author_hash` (SHA256, 8 hex chars)
-- Author hash is visible in frontend tooltips for identity correlation
-- Display name comes from email `From: Name <addr>` header (user-controlled)
-- No name → hash becomes display name
+- Article management auth (sender == author)
+- Hash forwarding (`blog+hash@domain`)
 
 ## Hash Forwarding
 
-Visitors can contact authors without knowing their real email:
-- Send email to `blog+<author_hash>@domain`
-- System looks up real email via `FindEmailByHash()` in SQLite
-- Forwards transparently to `blog+hash@domain` (routes through normal comment flow)
-- From/Reply-To: original sender — recipient sees the real person
+Contact author without knowing real email:
+1. Send to `blog+<author_hash>@domain`
+2. System looks up real email via `FindEmailByHash()` (SQLite tokens + article history)
+3. Forwards transparently to `blog+hash@domain`
+4. From/Reply-To: original sender — recipient sees the real person
 
 ## Notification Privacy
 
-- Notification emails sent based on 3-tier priority (per-article > per-user > global)
-- Same-author replies never trigger notification (don't email yourself)
-- Notification From address is blog's own address, not the replier's
+- From address is blog's own address, not replier's
 - Reply-To routes back to blog, keeping replier's email hidden
-- Per-user notification preferences configurable via settings page
+- Same-author replies never trigger notification

@@ -11,12 +11,14 @@ import (
 	"sync"
 	"time"
 
+	"mailblogger/config"
+
 	"gopkg.in/yaml.v3"
 )
 
 type Store struct {
 	ContentDir           string
-	History              HistoryConfig
+	History              config.HistoryConfig
 	mu                   sync.RWMutex
 	once                 sync.Once
 	hashMap              map[string]string
@@ -27,15 +29,6 @@ type Store struct {
 	db                   *sql.DB
 	defaultArticleNotify bool
 	defaultCommentNotify bool
-}
-
-type HistoryConfig struct {
-	ArticleKeep    bool
-	ArticleVisible bool
-	CommentKeep    bool
-	CommentVisible bool
-	ShowDeleted    bool
-	ShowReplies    bool
 }
 
 func NewStore(contentDir string) (*Store, error) {
@@ -63,80 +56,6 @@ func (s *Store) Close() error {
 		return s.db.Close()
 	}
 	return nil
-}
-
-func (s *Store) buildCache() {
-	s.once.Do(func() {
-		s.hashMap = make(map[string]string)
-		s.slugMap = make(map[string]string)
-		s.cmtMap = make(map[string]string)
-		entries, err := os.ReadDir(s.ContentDir)
-		if err != nil {
-			return
-		}
-		for _, e := range entries {
-			if !e.IsDir() || strings.HasPrefix(e.Name(), "_") {
-				continue
-			}
-			h := parseDirHash(e.Name())
-			if h != "" {
-				s.hashMap[h] = e.Name()
-				s.indexComments(h, e.Name())
-			}
-			if slug := parseDirSlug(e.Name()); slug != "" {
-				s.slugMap[slug] = e.Name()
-			}
-		}
-		s.rebuildArticleList()
-	})
-}
-
-func (s *Store) indexComments(articleID, dirName string) {
-	dir := filepath.Join(s.ContentDir, dirName)
-	comments, err := readCommentsJSON(filepath.Join(dir, "comments.json"))
-	if err != nil {
-		return
-	}
-	for _, c := range comments {
-		if c.UniqueID != "" {
-			s.cmtMap[c.UniqueID] = articleID
-		}
-	}
-}
-
-func (s *Store) invalidateCache() {
-	s.mu.Lock()
-	s.once = sync.Once{}
-	s.hashMap = nil
-	s.slugMap = nil
-	s.cmtMap = nil
-	s.articleList = nil
-	s.mu.Unlock()
-	if s.onChange != nil {
-		s.onChange()
-	}
-}
-
-func (s *Store) rebuildArticleList() {
-	entries, err := os.ReadDir(s.ContentDir)
-	if err != nil {
-		return
-	}
-	var articles []*Article
-	for _, entry := range entries {
-		if !entry.IsDir() || strings.HasPrefix(entry.Name(), "_") {
-			continue
-		}
-		a, err := s.readArticleDir(filepath.Join(s.ContentDir, entry.Name()))
-		if err != nil {
-			continue
-		}
-		articles = append(articles, a)
-	}
-	sort.Slice(articles, func(i, j int) bool {
-		return articles[i].Date.After(articles[j].Date)
-	})
-	s.articleList = articles
 }
 
 func (s *Store) SaveArticle(a *Article) error {
@@ -184,151 +103,6 @@ func (s *Store) SaveComment(c *Comment) error {
 	}
 	s.mu.Unlock()
 	return nil
-}
-
-func (s *Store) GetArticle(hash string) (*Article, error) {
-	dir, err := s.findByHash(hash)
-	if err != nil {
-		return nil, err
-	}
-	return s.readArticleDir(dir)
-}
-
-func (s *Store) GetArticleBySlug(slug string) (*Article, error) {
-	dir, err := s.findBySlug(slug)
-	if err != nil {
-		return nil, err
-	}
-	return s.readArticleDir(dir)
-}
-
-func (s *Store) readArticleDir(dir string) (*Article, error) {
-	path := filepath.Join(dir, "index.md")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	meta, body, err := parseFrontmatter(data)
-	if err != nil {
-		return nil, err
-	}
-	a := &Article{
-		UniqueID:    getStr(meta, "uniqueid"),
-		Subject:     getStr(meta, "subject"),
-		Author:      getStr(meta, "author"),
-		AuthorHash:  getStr(meta, "author_hash"),
-		AuthorEmail: getStr(meta, "author_email"),
-		Banner:      getStr(meta, "banner"),
-		Body:        body,
-	}
-	if ds := getStr(meta, "date"); ds != "" {
-		a.Date, _ = time.Parse(time.RFC3339, ds)
-	}
-	a.Slug = parseDirSlug(filepath.Base(dir))
-	return a, nil
-}
-
-func (s *Store) GetComments(articleID string) ([]*Comment, error) {
-	articleDir, err := s.findArticleDir(articleID)
-	if err != nil {
-		return nil, err
-	}
-
-	commentsPath := filepath.Join(articleDir, "comments.json")
-	comments, _ := readCommentsJSON(commentsPath)
-
-	for _, c := range comments {
-		if c.ReplyTo != "" && c.ReplyTo != articleID {
-			c.Depth = 1
-		}
-	}
-
-	return comments, nil
-}
-
-func (s *Store) ListArticlesPaged(page, perPage int) ([]*Article, int, error) {
-	all, err := s.ListArticles()
-	if err != nil {
-		return nil, 0, err
-	}
-	total := len(all)
-	start := (page - 1) * perPage
-	if start >= total {
-		return []*Article{}, total, nil
-	}
-	end := start + perPage
-	if end > total {
-		end = total
-	}
-	return all[start:end], total, nil
-}
-
-func (s *Store) ListArticles() ([]*Article, error) {
-	s.buildCache()
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	result := make([]*Article, len(s.articleList))
-	copy(result, s.articleList)
-	return result, nil
-}
-
-func (s *Store) ListArticlesByAuthor(authorHash string) []*Article {
-	s.buildCache()
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	var result []*Article
-	for _, a := range s.articleList {
-		if a.AuthorHash == authorHash {
-			result = append(result, a)
-		}
-	}
-	return result
-}
-
-func (s *Store) FindByUniqueID(uniqueID string) (*Article, error) {
-	return s.GetArticle(uniqueID)
-}
-
-func (s *Store) FindBySlug(slug string) (*Article, error) {
-	dir, err := s.findBySlug(slug)
-	if err != nil {
-		return nil, err
-	}
-	return s.readArticleDir(dir)
-}
-
-func (s *Store) FindComment(articleID, commentID string) (*Comment, error) {
-	articleDir, err := s.findArticleDir(articleID)
-	if err != nil {
-		return nil, err
-	}
-	comments, _ := readCommentsJSON(filepath.Join(articleDir, "comments.json"))
-	for _, c := range comments {
-		if c.UniqueID == commentID {
-			return c, nil
-		}
-	}
-	return nil, fmt.Errorf("comment %s not found", commentID)
-}
-
-func (s *Store) ArticleExists(hash string) bool {
-	_, err := s.findByHash(hash)
-	return err == nil
-}
-
-func (s *Store) CommentExists(commentID string) (bool, *Comment, string) {
-	s.buildCache()
-	s.mu.RLock()
-	articleID, ok := s.cmtMap[commentID]
-	s.mu.RUnlock()
-	if !ok {
-		return false, nil, ""
-	}
-	c, err := s.FindComment(articleID, commentID)
-	if err != nil {
-		return false, nil, ""
-	}
-	return true, c, articleID
 }
 
 func (s *Store) DeleteArticle(hash string) bool {
@@ -490,42 +264,30 @@ func (s *Store) ListCommentImages(articleID, commentUID string) ([]string, error
 	return images, nil
 }
 
-func (s *Store) findArticleDir(needle string) (string, error) {
-	dir, err := s.findByHash(needle)
-	if err == nil {
-		return dir, nil
+func (s *Store) readArticleDir(dir string) (*Article, error) {
+	path := filepath.Join(dir, "index.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
 	}
-	// needle might be a comment ID — check the comment cache
-	s.buildCache()
-	s.mu.RLock()
-	articleID, ok := s.cmtMap[needle]
-	s.mu.RUnlock()
-	if !ok {
-		return "", fmt.Errorf("article for %s not found", needle)
+	meta, body, err := ParseFrontmatter(data)
+	if err != nil {
+		return nil, err
 	}
-	return s.findByHash(articleID)
-}
-
-func (s *Store) findByHash(hash string) (string, error) {
-	s.buildCache()
-	s.mu.RLock()
-	dir, ok := s.hashMap[hash]
-	s.mu.RUnlock()
-	if !ok {
-		return "", fmt.Errorf("article %s not found", hash)
+	a := &Article{
+		UniqueID:    getStr(meta, "uniqueid"),
+		Subject:     getStr(meta, "subject"),
+		Author:      getStr(meta, "author"),
+		AuthorHash:  getStr(meta, "author_hash"),
+		AuthorEmail: getStr(meta, "author_email"),
+		Banner:      getStr(meta, "banner"),
+		Body:        body,
 	}
-	return filepath.Join(s.ContentDir, dir), nil
-}
-
-func (s *Store) findBySlug(slug string) (string, error) {
-	s.buildCache()
-	s.mu.RLock()
-	dir, ok := s.slugMap[slug]
-	s.mu.RUnlock()
-	if !ok {
-		return "", fmt.Errorf("slug %s not found", slug)
+	if ds := getStr(meta, "date"); ds != "" {
+		a.Date, _ = time.Parse(time.RFC3339, ds)
 	}
-	return filepath.Join(s.ContentDir, dir), nil
+	a.Slug = ParseDirSlug(filepath.Base(dir))
+	return a, nil
 }
 
 func articleDirName(a *Article) string {
@@ -544,7 +306,7 @@ func parseDirHash(dirName string) string {
 	return ""
 }
 
-func parseDirSlug(dirName string) string {
+func ParseDirSlug(dirName string) string {
 	parts := strings.SplitN(dirName, "_", 3)
 	if len(parts) == 3 {
 		return parts[2]
@@ -568,17 +330,7 @@ func formatFrontmatterBlock(fm map[string]string, body string) (string, error) {
 	return "---\n" + string(yamlBlock) + "---\n\n" + body, nil
 }
 
-// ParseFrontmatterExport is the exported version of parseFrontmatter
-func ParseFrontmatterExport(data []byte) (map[string]string, string, error) {
-	return parseFrontmatter(data)
-}
-
-// ParseDirSlugExport is the exported version of parseDirSlug
-func ParseDirSlugExport(dirName string) string {
-	return parseDirSlug(dirName)
-}
-
-func parseFrontmatter(data []byte) (map[string]string, string, error) {
+func ParseFrontmatter(data []byte) (map[string]string, string, error) {
 	text := strings.ReplaceAll(string(data), "\r\n", "\n")
 	if !strings.HasPrefix(text, "---\n") {
 		return map[string]string{}, text, nil
@@ -606,6 +358,13 @@ func parseFrontmatter(data []byte) (map[string]string, string, error) {
 		meta = map[string]string{}
 	}
 	return meta, body, nil
+}
+
+func getStr(m map[string]string, key string) string {
+	if m == nil {
+		return ""
+	}
+	return m[key]
 }
 
 func splitCommentBlocks(data []byte) [][]byte {
@@ -667,15 +426,6 @@ func splitCommentBlocks(data []byte) [][]byte {
 	return blocks
 }
 
-func getStr(m map[string]string, key string) string {
-	if m == nil {
-		return ""
-	}
-	return m[key]
-}
-
-var avatarExts = []string{"png", "jpg", "webp", "svg"}
-
 func (s *Store) EditComment(articleID, commentID, newBody string) error {
 	articleDir, err := s.findArticleDir(articleID)
 	if err != nil {
@@ -690,7 +440,7 @@ func (s *Store) EditComment(articleID, commentID, newBody string) error {
 
 	for _, c := range comments {
 		if c.UniqueID == commentID {
-			if s.History.CommentKeep {
+			if s.History.Comment.Keep {
 				c.Edits = append(c.Edits, CommentEdit{
 					Date: c.Date,
 					Body: c.Body,
@@ -720,7 +470,7 @@ func (s *Store) DeleteComment(articleID, commentID string) error {
 		if c.UniqueID == commentID {
 			c.Deleted = true
 			c.Body = ""
-			if !s.History.CommentKeep {
+			if !s.History.Comment.Keep {
 				c.Edits = nil
 			}
 			break
@@ -748,6 +498,71 @@ func writeCommentsJSON(path string, comments []*Comment) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0644)
+}
+
+var avatarExts = []string{"png", "jpg", "webp", "svg"}
+
+// GetArticleVersion reads an article and its comments from a historical edit_N/ directory.
+func (s *Store) GetArticleVersion(articleID, editDir string) (*Article, []*Comment, error) {
+	dir, err := s.findArticleDir(articleID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	editPath := filepath.Join(dir, editDir)
+	indexPath := filepath.Join(editPath, "index.md")
+	data, err := os.ReadFile(indexPath)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	meta, body, err := ParseFrontmatter(data)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	article := &Article{
+		UniqueID:    meta["uniqueid"],
+		Subject:     meta["subject"],
+		Author:      meta["author"],
+		AuthorHash:  meta["author_hash"],
+		AuthorEmail: meta["author_email"],
+		Banner:      meta["banner"],
+		Body:        body,
+	}
+	if ds := meta["date"]; ds != "" {
+		article.Date, _ = time.Parse(time.RFC3339, ds)
+	}
+	article.Slug = ParseDirSlug(filepath.Base(dir))
+
+	commentsPath := filepath.Join(editPath, "comments.json")
+	commentsData, err := os.ReadFile(commentsPath)
+	var comments []*Comment
+	if err == nil {
+		json.Unmarshal(commentsData, &comments)
+	}
+
+	return article, comments, nil
+}
+
+// GetArticleVersionFilePath returns the filesystem path for a file in a historical edit_N/ directory.
+func (s *Store) GetArticleVersionFilePath(articleID, editDir, filename string) (string, error) {
+	dir, err := s.findArticleDir(articleID)
+	if err != nil {
+		return "", err
+	}
+	editPath := filepath.Join(dir, editDir)
+	if _, err := os.Stat(editPath); os.IsNotExist(err) {
+		return "", err
+	}
+	if !strings.Contains(filename, ".") {
+		entries, err := filepath.Glob(filepath.Join(editPath, filename+".*"))
+		if err != nil || len(entries) == 0 {
+			return "", fmt.Errorf("file not found")
+		}
+		return entries[0], nil
+	}
+	return filepath.Join(editPath, filename), nil
 }
 
 func (s *Store) DetectAvatar() string {

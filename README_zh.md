@@ -2,136 +2,196 @@
 
 用邮件写博客。发一封邮件即发布文章，回复邮件即发表评论。
 
-页面风格参考内核邮件列表（kernel mailing list）—— 等宽字体、左对齐、零 JS 要求（优雅降级）。
-
 ## 快速开始
 
 ```bash
-# 1. 编辑 config.yaml，填入你的 IMAP/SMTP 凭证
+# 1. 复制并编辑配置文件
+cp config.example.yaml config.yaml
+# 填入邮件地址、IMAP/SMTP 凭证、白名单
+
 # 2. 编译
 go build -o mailblogger .
 
-# 3. 一次性拉取（检查收件箱，处理新邮件）
-./mailblogger fetch
-
-# 4. 启动 Web 服务 + 每 60 秒自动拉取
+# 3. 启动
 ./mailblogger serve
-
 # 打开 http://localhost:8080
 ```
 
-## 工作原理
+## 接收邮件
 
-### 发布文章
+**方式 A：IMAP 轮询** — 在 config.yaml 中配置 `mail.imap`。`./mailblogger serve` 每 30 秒拉取一次。`./mailblogger fetch` 单次拉取。
 
-向 `wmail@owowo.dev`（或你配置的任意地址）发送邮件。发信人必须在白名单中（`config.yaml`）。
+**方式 B：Cloudflare Email Worker**（推荐）— 无需 IMAP。Cloudflare 实时转发邮件到你的服务器。
+
+```yaml
+# config.yaml（仅 webhook，无 IMAP）
+mail:
+  address: blog@example.com
+webhook:
+  secret: "你的随机密钥"
+```
+
+部署 Worker（参见 `worker.example.js` + `wrangler.example.toml`），在 Cloudflare 控制台配置 Email Routing。
+
+两种方式可同时启用。
+
+## 发布文章
+
+向博客地址发送邮件。发信人必须在白名单中。
 
 ```
 From: 张三 <zhangsan@example.com>
-To: wmail@owowo.dev
+To: blog@example.com
 Subject: 我的第一篇文章
 
-你好世界！这是 Markdown 格式的正文。
+你好世界！支持 **Markdown** 格式。
 ```
 
-### 发表评论
+## 发表评论
 
-每篇文章都有一个 8 位唯一 ID，显示在页面上。回复到 `wmail+<唯一ID>@owowo.dev`：
+每篇文章和评论都有一个 8 位唯一 ID，显示在页面上。回复到 `blog+<ID>@域名`：
 
 ```
-From: 读者 <reader@example.com>
-To: wmail+afd888d6@owowo.dev
+To: blog+afd888d6@example.com
 Subject: Re: 我的第一篇文章
 
-好文章！我有个问题……
+好文章！
 ```
 
-### 回复某条评论
+## 编辑与删除
 
-每条评论也有自己的唯一 ID。发送到 `wmail+<评论ID>@owowo.dev`：
+向 `blog+<文章ID>@域名` 发送邮件：
+
+| 主题 | 效果 |
+|---|---|
+| `edit` | 替换正文。启用历史记录时旧版本归档到 `edit_N/` |
+| `delete` | 移至 `_deleted/` 或永久删除 |
+
+评论同理：向 `blog+<评论ID>@域名` 发送 `edit` 或 `delete`。
+
+## 正文配置
+
+在邮件正文开头声明选项：
 
 ```
-From: 另一个读者 <other@example.com>
-To: wmail+92d93709@owowo.dev
-Subject: Re: 我的第一篇文章
+---
+banner: 2
+slug: my-post
+notify: on
+title: 自定义标题
+---
 
-我也想知道答案。
+文章正文从这里开始。
 ```
 
-### 邮件通知
+| 键 | 说明 |
+|---|---|
+| `banner` | 用作页面横幅的图片编号（替换站点头像） |
+| `slug` | 自定义 URL 路径（小写字母、数字、连字符） |
+| `title` | 覆盖文章标题 |
+| `notify` | `on`/`true` → 关注；`off`/`false` → 静音 |
 
-有人回复你的评论时，你会收到一封通知邮件。通知邮件的 `Reply-To` 头指向 `wmail+<新评论ID>@owowo.dev` —— 在邮件客户端直接点回复就能继续参与讨论。
+## 通知
 
-### 编辑 / 删除文章
+有人回复你的评论时，你会收到通知邮件。直接点回复即可继续讨论——`Reply-To` 头会将邮件路由回讨论线程。
 
-作为文章作者，向 `wmail+<文章ID>@owowo.dev` 发送邮件：
+发送主题为 `settings` 的邮件可配置通知偏好。
 
-| 操作 | 主题 | 效果 |
-|---|---|---|
-| 编辑 | `[EDIT] 新标题` | 替换文章标题和正文 |
-| 删除 | `[DELETE]` | 删除整个文章目录 |
+三级优先级：单篇文章覆盖 > 个人偏好 > 全局默认。
 
-## 配置说明
+## API
+
+只读 JSON API，可用于构建自定义前端。详见 [docs/api.md](docs/api.md)。
+
+| 端点 | 说明 |
+|---|---|
+| `GET /api/site` | 站点信息 |
+| `GET /api/articles` | 所有文章 |
+| `GET /api/article/{id}` | 文章详情（按 hash 或 slug） |
+| `GET /api/article/{id}/comments` | 文章评论 |
+| `POST /api/article` | 创建文章 |
+| `POST /api/comment` | 创建评论 |
+| `POST /api/raw-email` | Webhook：接收原始邮件 |
+
+## 主题
+
+主题控制整个前端。在 config.yaml 中设置：
 
 ```yaml
-# config.yaml
-imap:
-  server: imap.purelymail.com
-  port: 993
-  username: wmail@owowo.dev
-  password: xvgkbjtnztexspcbjsuz
+theme: default
+```
 
-smtp:
-  server: smtp.purelymail.com
-  port: 465
-  # 用户名和密码不填则自动使用 IMAP 凭证
+主题文件放在 `themes/<名称>/` 下。完整的主题开发指南见 [docs/themes.md](docs/themes.md)。
 
-domain: owowo.dev          # 邮件域名
-content_dir: content       # 文章存储目录
+## 配置
 
-whitelist:                 # 允许发布文章的发信人
-  - "*@owowo.dev"
+所有选项见 `config.example.yaml`。主要字段：
+
+```yaml
+mail:
+  address: blog@example.com
+  imap:
+    server: imap.example.com
+    username: blog@example.com
+    password: your-password
+  smtp:
+    server: smtp.example.com
+    port: 465
+  whitelist:
+    - "*@example.com"
 
 site:
-  title: 我的博客           # 页面标题
-  subtitle: ""             # 可选副标题
-  footer_html: ""          # 页脚 HTML（支持 <a>、<script> 等）
+  lang: zh
+  show_author: true
+  width: 600
 
 web:
   port: 8080
-  host: 0.0.0.0
+
+privacy:
+  hide_email: true
+
+history:
+  article:
+    keep: true
+  comment:
+    keep: true
+  show_deleted: true
 ```
+
+所有配置项支持热修改——编辑 `config.yaml` 后立即生效。
 
 ## 内容结构
 
 ```
 content/
-└── afd888d6/              # 文章目录（以唯一 ID 命名）
-    ├── index.md           # 文章（YAML frontmatter + Markdown 正文）
-    └── comments.md        # 评论（多个 YAML 文档块）
+├── 20260713_afd888d6_hello-world/
+│   ├── index.md           # frontmatter + markdown 正文
+│   ├── comments.json      # 评论 JSON 数组
+│   ├── 1.webp             # 文章图片
+│   └── edit_0/            # 归档版本（启用历史记录时）
+├── _drafts/               # 非白名单投稿
+├── _deleted/              # 已删除文章归档
+└── mailblogger.db         # SQLite 元数据
 ```
 
-## 隐私设计
+## 隐私
 
-- 作者名称取自邮件 From 头的显示名（如 `张三` 来自 `张三 <a@b.com>`）
-- 未设置名称时，显示邮箱的 SHA256 哈希（前 8 位）
-- 作者邮箱地址 **绝不会** 出现在 HTML 输出中
-- 每位作者通过稳定的 `author_hash` 标识（邮箱 SHA256 前 8 位）
-- 所有文章和评论均显示唯一 ID
+- 作者名称取自邮件 `From:` 头；无名称时显示哈希
+- 作者邮箱默认隐藏（`privacy.hide_email`）
+- 访客通过 `blog+<author_hash>@域名` 联系作者，无需知道真实邮箱
+- 通知的 `Reply-To` 经由博客服务器路由，不暴露回复者邮箱
 
-## 测试
-
-项目附带一个 SMTP 发送工具用于开发调试：
+## Docker
 
 ```bash
-cd tools && go build -o sendmail sendmail.go
-
-# 发送测试文章
-./sendmail "wmail@owowo.dev" "你好世界" "# Markdown 正文"
-
-# 发送测试评论（将 <uid> 替换为实际 ID）
-./sendmail -name "张三" -from "zhangsan@example.com" "wmail+<uid>@owowo.dev" "Re: 你好" "好文章！"
-
-# 处理邮件
-cd .. && ./mailblogger fetch
+docker build -t mailblogger .
+docker run -p 8080:8080 \
+  -v ./config.yaml:/app/config.yaml \
+  -v ./content:/app/content \
+  mailblogger
 ```
+
+## 许可证
+
+MIT

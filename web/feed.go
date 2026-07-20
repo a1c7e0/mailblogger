@@ -87,7 +87,7 @@ func (s *Server) writeFeed(buf *strings.Builder, articles []*blog.Article, feedI
 	baseURL := fmt.Sprintf("%s://%s", s.Scheme, s.Host)
 	buf.WriteString(`<?xml version="1.0" encoding="utf-8"?>`)
 	buf.WriteString(`<feed xmlns="http://www.w3.org/2005/Atom">`)
-	fmt.Fprintf(buf, `<title>%s</title>`, xmlEscape(s.Site.Title))
+	fmt.Fprintf(buf, `<title>%s</title>`, xmlEscape(s.Host))
 	fmt.Fprintf(buf, `<link href="%s/"/>`, baseURL)
 	fmt.Fprintf(buf, `<id>tag:%s,2026:%s</id>`, s.Host, feedID)
 	fmt.Fprintf(buf, `<updated>%s</updated>`, time.Now().UTC().Format(time.RFC3339))

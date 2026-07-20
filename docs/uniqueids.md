@@ -2,12 +2,8 @@
 
 ## File: `blog/uniqueid.go`
 
-## Unique IDs
+## Hash Function
 
-Every article and comment gets an 8-character hex unique ID.
-
-### Generation
-Internal helper:
 ```go
 func hashID(input string) string {
     h := sha256.Sum256([]byte(input))
@@ -15,54 +11,31 @@ func hashID(input string) string {
 }
 ```
 
-Public wrappers `GenUniqueID(input)` and `GenAuthorHash(email)` both call `hashID`.
+All IDs are 8-character hex strings from SHA256.
 
-### Article IDs
-`input = raw.MessageID` (the Message-ID header from the email).
+## ID Generation
 
-Fallback if Message-ID is empty: `from + subject + date`.
-
-### Comment IDs
-`input = raw.MessageID + parentID` (parent is either article or comment uniqueid).
-
-### Article Directory Name
-Articles are stored as `YYYYMMDD_<hash>[_<slug>]`. The slug is extracted from the directory name at load time, sorted by date prefix.
-
-### Custom Slug
-Add `[SLUG:my-slug]` in email subject to set a custom URL. Slug must match `^[a-z0-9][a-z0-9-]*[a-z0-9]$`.
-
-This ensures deduplication: same Message-ID + same parent = same unique ID, preventing re-processing of the same reply.
-
-## Author Hashing
-
-### Generation
-```go
-func GenAuthorHash(email string) string {
-    return hashID(email)
-}
-```
-
-Takes the raw email address (e.g., `alice@example.com`), hashes via `hashID`, returns first 8 hex chars.
-
-### Purpose
-- Links same-person comments across articles without revealing email
-- Displayed in frontend via `title="hash: <author_hash>"` on author spans
-- Used for same-author notification suppression in `notifyReply()`
+- **Article ID**: `GenUniqueID(messageID)` — from email Message-ID header. Fallback: `from+subject+date`.
+- **Comment ID**: `GenUniqueID(messageID + parentID)` — includes parent article/comment ID for deduplication.
+- **Author hash**: `GenAuthorHash(email)` — deterministic per email address.
 
 ## Display Names
 
-```go
-func GenDisplayName(name, email string) string {
-    if name != "" {
-        return name
-    }
-    return GenAuthorHash(email)
-}
+`GenDisplayName(name, email)`: use `From:` name if present, otherwise author hash as fallback.
+
+## Directory Names
+
+Articles stored as `YYYYMMDD_<hash>[_<slug>]`. Hash and slug parsed from directory name:
+- `parseDirHash(name)` → `parts[1]`
+- `parseDirSlug(name)` → `parts[2]` (empty if none)
+
+## Custom Slugs
+
+Set via body config:
+```
+---
+slug: my-custom-url
+---
 ```
 
-- `From: Alice <a@b.com>` → display `Alice`
-- `From: a@b.com` (no name) → display `GenAuthorHash(email)` as fallback
-
-## Privacy
-
-See [Privacy & Email Exposure](privacy.md).
+Rules: lowercase letters, digits, dashes; must match `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`.

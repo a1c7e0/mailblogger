@@ -4,69 +4,65 @@
 
 ```
 mailblogger/
-├── main.go                  # Entry point: CLI, fetch/serve commands, signal handling, atomic config
-├── config.yaml              # User configuration (excluded from git)
-├── config.example.yaml      # Template configuration (committed)
-├── config/config.go         # YAML config loading, defaults, address parsing
+├── main.go                      # CLI entry point, fetch/serve commands, signal handling, config watcher
+├── config/config.go             # YAML config loading, defaults, address parsing
 ├── blog/
-│   ├── article.go           # Article and Comment structs
-│   ├── uniqueid.go          # SHA256 hash generation for IDs and author linking (hashID internal)
-│   └── store.go             # Filesystem storage: read/write articles, comments, images; sync.Once cache
+│   ├── article.go               # Article, Comment, CommentEdit structs
+│   ├── uniqueid.go              # SHA256 hash generation for IDs and author linking
+│   ├── store.go                 # Filesystem storage, sync.Once cache, filtered comment queries
+│   └── store_sql.go             # SQLite metadata (tokens, user prefs, watchers/muters)
 ├── email/
-│   ├── imap.go              # IMAP client: connect, fetch, parse (single-pass multipart), body cleaning
-│   ├── smtp.go              # SMTP sender: implicit TLS on port 465, full domain for TLS/auth
-│   ├── processor.go         # Email dispatch: article, comment, [EDIT], [DELETE], DKIM, notify
-│   ├── images.go            # Image extraction from parsed MIME, recursive multipart, WebP conversion (Go), CID replacement
-│   └── dkim.go              # DKIM signature verification via DNS TXT lookup
+│   ├── imap.go                  # IMAP client, MIME parsing, parseBodyParts, htmlToMarkdown
+│   ├── smtp.go                  # SMTP sender (implicit TLS, port 465)
+│   ├── processor.go             # Processor struct, ProcessMessage dispatch, config parsing
+│   ├── processor_article.go     # Article create/edit/delete lifecycle
+│   ├── processor_comment.go     # Comment create/edit/delete lifecycle
+│   ├── processor_notify.go      # Notification emails, ancestor threading, quoted replies
+│   ├── poller.go                # IMAP Poller with backoff, FetchOnce
+│   ├── images.go                # Image extraction, WebP conversion, CID replacement
+│   └── dkim.go                  # DKIM signature verification via DNS
 ├── web/
-│   ├── server.go            # HTTP server, handlers, template funcs, markdown render, scheme-aware
-│   ├── feed.go              # Atom feed generation with 5min cache, image URL rewriting
-│   ├── api.go               # REST API: POST /api/article, POST /api/comment, GET /api/status
-│   └── templates/
-│       ├── index.html       # Article list with pagination
-│       └── article.html     # Article + comments with reply/copy/link buttons, image gallery
-├── static/
-│   ├── style.css              # Monospace, left-aligned, dark mode
-│   └── spa.js                 # SPA navigation, page init (timezone, copy, highlights)
-├── tools/sendmail.go         # SMTP test tool for development
-├── Dockerfile                # Multi-stage build
-├── docker-compose.yml        # Service definition
-└── docs/                     # Agent documentation
+│   ├── server.go                # HTTP routing, handlers, SPA, settings page
+│   ├── render.go                # Markdown→HTML, image wrapping, date formatting, mailto links
+│   ├── assets.go                # Favicon/avatar detection, ICO generation
+│   ├── api.go                   # REST API: POST article/comment, GET site/articles/status, raw-email webhook
+│   ├── feed.go                  # Atom feed generation with 5min cache
+│   ├── sitemap.go               # XML sitemap generation
+│   └── templates/               # go:embed HTML templates
+├── static/                      # CSS and JS (spa.js for client-side navigation)
+├── themes/                      # Custom theme directory (SPA entry points)
+├── tools/sendmail.go            # SMTP test tool
+└── content/                     # Generated output (articles, comments, images, SQLite DB)
 ```
 
 ## Data Flow
 
 ```
-Email → IMAP poll (30s interval) → FetchUnseen()
-  → parseMessage() → single mail.ReadMessage → RawMessage (with Images, HTMLBody)
-    → extractMultipartAll() single-pass: text + HTML + images
+Email → IMAP poll (30s) or webhook (/api/raw-email)
+  → ParseRawEmail() / parseMessage() → parseBodyParts()
+    → text/plain, multipart/*, text/html → RawMessage (Body, HTMLBody, Images)
   → ProcessMessage()
     → DKIM check → fail → error reply
+    → Settings command? → handleSettingsCommand()
+    → Hash forward? → handleHashForward()
     → parseTargetID() extracts uniqueid from To header
     → No uniqueid → processArticle()
       → Whitelist check → fail → SaveDraft() + draft reply
-      → parseBodyConfig() → invalid → error reply
-      → Slug conflict / bad banner → error reply
+      → parseBodyConfig() → extract banner/slug/notify/title
       → Extract images → saveArticleImages() → CID replacement
-      → Generate uniqueid → SaveArticle()
+      → SaveArticle()
     → Has uniqueid → processComment()
-      → Target not found → error reply
-      → Article match → check [EDIT]/[DELETE] or top-level comment
-      → Comment match → reply comment + saveCommentImages() + notifyReply()
+      → Target article? → check [EDIT]/[DELETE] or new comment
+      → Target comment? → reply comment + notifyReply()
   → DeleteEmails() → EXPUNGE
-  → disconnect → wait 30s → repeat
 ```
 
-## Key Design Decisions
+## Design Decisions
 
 - **No external web framework**: `net/http` + `html/template` + `go:embed`
-- **No database**: filesystem with YAML frontmatter + markdown body
-- **No external mail parser**: `net/mail` for MIME, custom recursive multipart extraction
-- **Minimal JS**: SPA navigation (`static/spa.js`), timezone conversion, clipboard, comment highlighting; header/footer persist across page navigations
+- **Filesystem as source of truth**: articles/comments as markdown + frontmatter; SQLite for metadata only
+- **No external mail parser**: `net/mail` for MIME, custom `parseBodyParts` + `extractMultipartAll`
+- **Plus-addressing**: `blog@domain` → `blog+<uid>@domain` for routing
+- **sync.Once cache**: article list, hash maps, slug maps built once, invalidated on writes
 - **Implicit TLS SMTP**: port 465, no STARTTLS
-- **IMAP polling**: 30-second interval, short-lived connections; exponential backoff on failure
-- **Plus-addressing**: `mail.address: blog@owowo.dev` → `EmailLocal=blog`, `EmailDomain=owowo.dev` → `blog+<uid>@owowo.dev`
-- **sync.Once cache**: article list, hash maps, and slug maps built once and invalidated on writes
-- **Feed cache**: 5-minute TTL with automatic invalidation on article changes
-- **API endpoint**: POST /api/article and /api/comment for programmatic access without email
-- **Avatar auto-detection**: scans `content/avatar.{png,jpg,webp,svg}` at startup; favicon auto-generated from avatar and cached in memory
+- **IMAP polling**: 30s interval, short-lived connections, exponential backoff (1s → 2min)

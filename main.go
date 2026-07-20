@@ -48,14 +48,7 @@ func main() {
 		log.Fatalf("init store: %v", err)
 	}
 	store.SetDefaultNotify(cfg.Mail.Notify.Article, cfg.Mail.Notify.Comment)
-	store.History = blog.HistoryConfig{
-		ArticleKeep:    cfg.History.Article.Keep,
-		ArticleVisible: cfg.History.Article.Visible,
-		CommentKeep:    cfg.History.Comment.Keep,
-		CommentVisible: cfg.History.Comment.Visible,
-		ShowDeleted:    cfg.History.ShowDeleted,
-		ShowReplies:    cfg.History.ShowReplies,
-	}
+	store.History = cfg.History
 
 	switch args[0] {
 	case "fetch":
@@ -87,44 +80,26 @@ func runFetch(cfg *config.Config, store *blog.Store) {
 		sender = email.NewSMTPSender(cfg.Mail.SMTP.Server, cfg.Mail.SMTP.Port, cfg.Mail.SMTP.Username, cfg.Mail.SMTP.Password)
 	}
 
-	c, err := email.ConnectIMAP(imapCfg)
-	if err != nil {
-		log.Fatalf("connect imap: %v", err)
-	}
-	defer c.Logout()
-
-	messages, err := email.FetchUnseen(c)
-	if err != nil {
-		log.Fatalf("fetch unseen: %v", err)
-	}
-
-	if len(messages) == 0 {
-		log.Println("no new messages")
-		return
-	}
-
 	processor := email.NewProcessor(store, cfg.EmailLocal, cfg.EmailDomain, cfg.Host, cfg.Web.Scheme, cfg.Mail.Whitelist, sender)
-	var processedSeqs []uint32
 
-	for _, msg := range messages {
-		if err := processor.ProcessMessage(msg); err != nil {
-			log.Printf("error processing message UID=%d: %v", msg.SeqNum, err)
-			continue
-		}
-		processedSeqs = append(processedSeqs, msg.SeqNum)
-	}
-
-	if len(processedSeqs) > 0 {
-		if err := email.DeleteEmails(c, processedSeqs); err != nil {
-			log.Printf("error deleting processed emails: %v", err)
-		} else {
-			log.Printf("deleted %d processed emails", len(processedSeqs))
-		}
+	if err := email.FetchOnce(imapCfg, processor); err != nil {
+		log.Fatalf("fetch: %v", err)
 	}
 }
 
 func runServe(cfg *config.Config, store *blog.Store, configPath string) {
-	srv, err := web.NewServer(store, cfg.Host, cfg.Web.Scheme, cfg.EmailLocal, cfg.EmailDomain, cfg.Privacy.HideEmail, cfg.Site, cfg.Web.Host, cfg.Web.Port)
+	srv, err := web.NewServer(web.ServerConfig{
+		Store:       store,
+		Host:        cfg.Host,
+		Scheme:      cfg.Web.Scheme,
+		EmailLocal:  cfg.EmailLocal,
+		EmailDomain: cfg.EmailDomain,
+		HideEmail:   cfg.Privacy.HideEmail,
+		Site:        cfg.Site,
+		ListenHost:  cfg.Web.Host,
+		Port:        cfg.Web.Port,
+		Theme:       cfg.Theme,
+	})
 	if err != nil {
 		log.Fatalf("init server: %v", err)
 	}
@@ -164,7 +139,8 @@ func runServe(cfg *config.Config, store *blog.Store, configPath string) {
 
 	done := make(chan struct{})
 	if cfg.Mail.IMAP.Server != "" {
-		go imapPoller(store, sender, done)
+		poller := email.NewPoller(store, func() *config.Config { return currentConfig.Load() }, sender, done)
+		go poller.Start()
 		log.Println("IMAP poller started")
 	} else {
 		log.Println("IMAP not configured, webhook-only mode")
@@ -180,87 +156,6 @@ func runServe(cfg *config.Config, store *blog.Store, configPath string) {
 		defer cancel()
 		httpSrv.Shutdown(ctx)
 	}
-}
-
-func imapPoller(store *blog.Store, sender *email.SMTPSender, done <-chan struct{}) {
-	pollInterval := 30 * time.Second
-	backoff := 1 * time.Second
-	maxBackoff := 2 * time.Minute
-
-	for {
-		select {
-		case <-done:
-			return
-		default:
-		}
-
-		cfg := currentConfig.Load()
-		processor := email.NewProcessor(store, cfg.EmailLocal, cfg.EmailDomain, cfg.Host, cfg.Web.Scheme, cfg.Mail.Whitelist, sender)
-
-		imapCfg := email.Config{
-			Server:   cfg.Mail.IMAP.Server,
-			Port:     cfg.Mail.IMAP.Port,
-			Username: cfg.Mail.IMAP.Username,
-			Password: cfg.Mail.IMAP.Password,
-		}
-
-		err := imapFetchAndProcess(imapCfg, processor)
-		if err != nil {
-			log.Printf("imap: %v (retry in %v)", err, backoff)
-			select {
-			case <-time.After(backoff):
-				backoff *= 2
-				if backoff > maxBackoff {
-					backoff = maxBackoff
-				}
-				continue
-			case <-done:
-				return
-			}
-		}
-
-		backoff = 1 * time.Second
-
-		select {
-		case <-time.After(pollInterval):
-		case <-done:
-			return
-		}
-	}
-}
-
-func imapFetchAndProcess(imapCfg email.Config, processor *email.Processor) error {
-	c, err := email.ConnectIMAP(imapCfg)
-	if err != nil {
-		return fmt.Errorf("connect: %w", err)
-	}
-	defer c.Logout()
-
-	messages, err := email.FetchUnseen(c)
-	if err != nil {
-		return fmt.Errorf("fetch: %w", err)
-	}
-
-	if len(messages) == 0 {
-		return nil
-	}
-
-	var seqs []uint32
-	for _, msg := range messages {
-		if err := processor.ProcessMessage(msg); err != nil {
-			log.Printf("process UID=%d: %v", msg.SeqNum, err)
-			continue
-		}
-		seqs = append(seqs, msg.SeqNum)
-	}
-
-	if len(seqs) > 0 {
-		if err := email.DeleteEmails(c, seqs); err != nil {
-			log.Printf("delete: %v", err)
-		}
-	}
-
-	return nil
 }
 
 func watchConfig(configPath string, srv *web.Server) {

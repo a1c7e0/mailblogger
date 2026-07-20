@@ -2,187 +2,103 @@
 
 ## File: `config.yaml`
 
-Excluded from git via `.gitignore`. Template at `config.example.yaml`.
+Excluded from git. Template at `config.example.yaml`.
 
 ## Structure
 
 ```yaml
-mail:           # email identity, servers, access control, notifications
-  address:      # blog email address (parsed into EmailLocal + EmailDomain)
-  imap:         # IMAP server connection
-  smtp:         # SMTP server connection (falls back to IMAP credentials)
-  whitelist:    # allowed article authors
-  notify:       # per-type notification defaults
+mail:
+  address: blog@domain.com        # parsed into EmailLocal + EmailDomain
+  imap:
+    server: imap.domain.com
+    port: 993
+    username: user
+    password: pass
+  smtp:
+    server: smtp.domain.com       # falls back to IMAP credentials
+    port: 465
+  whitelist:                       # allowed article authors
+    - alice@example.com
+    - *@example.com
+  notify:
+    article: true                 # notify authors about comments
+    comment: false                # notify commenters about replies
 
-content_dir:    # article storage directory
+content_dir: content
 
-site:           # blog appearance and branding
-  title:
-  subtitle:
-  description:
-  lang:
-  footer_html:
-  show_author:
-  width:
+site:
+  lang: en
+  show_author: true
+  width: 600
+  auto_lang: false
   links:
+    - title: About
+      url: /about
 
-web:            # HTTP server settings
-  port:
-  host:
-  scheme:       # URL scheme for feed links (http or https)
+web:
+  port: 8080
+  host: 0.0.0.0
+  scheme: https
 
-privacy:        # email display settings
-  hide_email:   # hide author emails in frontend
+privacy:
+  hide_email: true
 
-history:        # version history and deletion behavior
+webhook:
+  secret: "random-string"
+
+history:
   article:
-    keep:       # create edit_N folders on edit; move to _deleted/ on delete
-    visible:    # allow web access to edit_N/ paths
+    keep: true                    # create edit_N/ on edit, move to _deleted/ on delete
+    visible: true                 # allow web access to edit_N/ paths
   comment:
-    keep:       # store edits array in comment JSON
-    visible:    # include edits in API responses
-  show_deleted: # show "[已删除]" placeholder for deleted comments
-  show_replies: # show replies to deleted comments
+    keep: true                    # store edits array in comment JSON
+  show_deleted: true              # show deleted comment placeholders
+  show_replies: true              # show replies to deleted comments
+
+theme: default                    # or map of language → theme directory
 ```
 
-## Fields
+## Defaults
 
-### Mail
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `mail.address` | string | — | Email address for the blog. Parsed into `EmailLocal` and `EmailDomain`. |
-| `mail.imap.server` | string | — | IMAP server hostname. |
-| `mail.imap.port` | int | `993` | IMAP port. |
-| `mail.imap.username` | string | — | IMAP login. |
-| `mail.imap.password` | string | — | IMAP password. |
-| `mail.smtp.server` | string | — | SMTP server hostname. |
-| `mail.smtp.port` | int | `465` | SMTP port (implicit TLS). |
-| `mail.smtp.username` | string | `imap.username` | SMTP login. Falls back to IMAP. |
-| `mail.smtp.password` | string | `imap.password` | SMTP password. Falls back to IMAP. |
-| `mail.whitelist` | []string | — | Allowed article authors. Supports `*@domain.com`. |
-| `mail.notify.article` | bool | `true` | Default: notify article authors when their articles receive comments. |
-| `mail.notify.comment` | bool | `false` | Default: notify comment authors when their comments receive replies. |
-
-### Site
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `site.title` | string | `MailBlogger` | Page title. |
-| `site.subtitle` | string | `` | Tagline below title. |
-| `site.description` | string | `` | Site description for meta tags, OpenGraph, and Twitter Cards. |
-| `site.lang` | string | `en` | HTML `lang` attribute. |
-| `site.footer_html` | string | `` | Raw HTML footer (supports `<script>`, `<a>`, etc). |
-| `site.show_author` | bool | `true` | Show author on index page. |
-| `site.width` | int | `600` | Max content width in pixels. |
-| `site.links` | []NavLink | `` | Nav links shown below subtitle. Each has `title` and `url`. |
-
-### Web
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `web.port` | int | `8080` | HTTP listen port. |
-| `web.host` | string | `0.0.0.0` | HTTP listen address. |
-| `web.scheme` | string | `https` | URL scheme for feed links and generated URLs (`http` or `https`). |
-
-### Privacy
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `privacy.hide_email` | bool | `true` | Hide author email addresses in the frontend. Reply forwarding still works. |
-
-### Other
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `content_dir` | string | `content` | Directory for article storage. |
+| Field | Default |
+|---|---|
+| `mail.imap.port` | 993 |
+| `mail.smtp.port` | 465 |
+| `mail.smtp.username` | = `mail.imap.username` |
+| `mail.smtp.password` | = `mail.imap.password` |
+| `content_dir` | `content` |
+| `site.lang` | `en` |
+| `site.show_author` | `true` |
+| `site.width` | 600 |
+| `web.port` | 8080 |
+| `web.host` | `0.0.0.0` |
+| `web.scheme` | `https` |
+| `privacy.hide_email` | `true` |
+| `history.*.keep` | `true` |
+| `history.*.visible` | `true` |
+| `history.show_deleted` | `true` |
+| `history.show_replies` | `true` |
 
 ## Address Parsing
 
-```yaml
-mail:
-  address: blog@owowo.dev
-```
+`mail.address: blog@owowo.dev` → `EmailLocal=blog`, `EmailDomain=owowo.dev`
 
-Automatically parsed into:
-- `EmailLocal` = `blog`
-- `EmailDomain` = `owowo.dev`
-
-The plus-addressing pattern becomes: `blog+<uniqueid>@owowo.dev`
-
-## Notification Preferences
-
-Users can configure per-user notification and privacy preferences via email:
-- Send an email with subject `settings` (case-insensitive, after stripping Re:/Fwd:)
-- System replies with a time-limited settings link (24h expiry)
-- Click link to configure: notification preferences, email visibility
-
-Three-tier notification priority:
-1. Per-article overrides (body config `notify:` or `[WATCH]`/`[MUTE]` tags in subject)
-2. Per-user preferences (saved via settings page)
-3. Global defaults (`mail.notify.article` and `mail.notify.comment`)
-
-Email privacy: per-user `hide_email` overrides `privacy.hide_email` global default.
-
-## Hash Forwarding
-
-Visitors can contact authors by emailing `blog+<author_hash>@domain`. The system forwards the email transparently to the author's real address. This works without exposing the author's email.
-
-## Custom URL (Slug)
-
-Set in body config:
-```
----
-slug: my-custom-url
----
-```
-Slug rules: lowercase letters, digits, dashes only; must start and end with alphanumeric.
-Accessible at `/<slug>`; hash URL remains at `/<hash>`.
-
-## Avatar & Favicon
-
-Avatar and favicon are auto-detected from the `content/` directory at startup. No config field needed.
-
-### Avatar
-Place a file named `avatar.{png,jpg,webp,svg}` in `content/`. Scanned in order: `.png` → `.jpg` → `.webp` → `.svg`. First match wins. Displayed as full-width banner at page top.
-
-### Favicon
-- `content/favicon.svg` — used if present (served at `/static/favicon.svg`)
-- `content/favicon.ico` — used if present (served at `/favicon.ico`)
-- If no favicon file exists and an avatar is detected, both SVG and ICO favicons are generated from the avatar and cached in memory (not written to disk). If no avatar either, no favicon is served (browser uses its default).
-
-## Banner Image
-
-Set in body config to override the auto-detected site avatar with an article image:
-```
----
-banner: 2
----
-```
-The number refers to the image attachment order (1 = first image). The selected image replaces the site avatar at the page top (same position, same full-width styling), clickable to view full-size. On SPA navigation, the banner area swaps automatically.
-
-## Body Config `title`
-
-Override article title:
-```
----
-title: Custom Title
----
-```
-For new articles, overrides the email subject. For edit commands, overrides the original title.
-
-## Body Config `notify`
-
-Set notification preference for the article:
-```
----
-notify: on
----
-```
-Values: `on`/`true`/`watch` → author watches article (notified of comments). `off`/`false`/`mute` → author mutes article.
+Plus-addressing: `blog+<uniqueid>@owowo.dev`
 
 ## Whitelist Patterns
 
 - `*` — allow all
 - `alice@example.com` — exact match
-- `*@example.com` — any user at example.com
+- `*@example.com` — any user at domain
+
+Empty whitelist = allow all.
+
+## Theme
+
+Single theme: `theme: default` → serves `themes/default/index.html`
+
+Per-language: `theme: { en: "theme-en", zh: "theme-zh" }` → auto-detect from `Accept-Language` header when `site.auto_lang` is true.
+
+## Hot-Reload
+
+All config fields are hot-reloadable via `fsnotify` on `config.yaml`. IMAP poller picks up new config on next cycle.

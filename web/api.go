@@ -129,7 +129,6 @@ func (s *Server) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status": "ok",
 		"host":   s.Host,
-		"site":   s.Site.Title,
 	})
 }
 
@@ -140,11 +139,7 @@ func (s *Server) handleAPISite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, map[string]interface{}{
-		"title":        s.Site.Title,
-		"subtitle":     s.Site.Subtitle,
-		"description":  s.Site.Description,
 		"lang":         s.Site.Lang,
-		"footer_html":  s.Site.FooterHTML,
 		"show_author":  s.Site.ShowAuthor,
 		"avatar":       s.Site.Avatar,
 		"width":        s.Site.Width,
@@ -238,34 +233,14 @@ func (s *Server) handleAPIArticleComments(w http.ResponseWriter, r *http.Request
 		s.writeJSON(w, http.StatusNotFound, APIResponse{Error: "article not found"})
 		return
 	}
-	comments, err := s.Store.GetComments(article.UniqueID)
+	comments, err := s.Store.GetFilteredComments(article.UniqueID, blog.FilterOptions{
+		ShowDeleted: s.Store.History.ShowDeleted,
+		ShowReplies: s.Store.History.ShowReplies,
+	})
 	if err != nil {
 		comments = nil
 	}
-	// Filter deleted/replies based on config
-	var filtered []*blog.Comment
-	deletedIDs := make(map[string]bool)
-	for _, c := range comments {
-		if c.Deleted {
-			deletedIDs[c.UniqueID] = true
-			if s.Store.History.ShowDeleted {
-				filtered = append(filtered, c)
-			}
-		} else {
-			filtered = append(filtered, c)
-		}
-	}
-	if !s.Store.History.ShowReplies {
-		var withReplies []*blog.Comment
-		for _, c := range filtered {
-			if c.ReplyTo != "" && c.ReplyTo != article.UniqueID && deletedIDs[c.ReplyTo] {
-				continue
-			}
-			withReplies = append(withReplies, c)
-		}
-		filtered = withReplies
-	}
-	s.writeJSON(w, http.StatusOK, filtered)
+	s.writeJSON(w, http.StatusOK, comments)
 }
 
 func (s *Server) handleAPIRawEmail(w http.ResponseWriter, r *http.Request) {

@@ -1,0 +1,16 @@
+{
+  "comments": "评论",
+  "reply": "[回复]",
+  "copy_address": "[复制回复地址]",
+  "deleted": "[已删除]",
+  "no_comments": "暂无评论",
+  "no_articles": "还没有文章。发送邮件到 {{email}} 开始写博客。",
+  "back_to_index": "\u2190 返回首页",
+  "edit_history": "编辑历史",
+  "notify_hint": "发送 <code>settings</code> 邮件主题来配置通知偏好。",
+  "attachments": "附件",
+  "page_of": "第 {{page}} 页，共 {{total}} 页",
+  "newer": "\u2190 较新",
+  "older": "较旧 \u2192",
+  "write_reply": "在上方写回复，只有上方内容会被保存。"
+}

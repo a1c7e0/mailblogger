@@ -1,43 +1,25 @@
 package web
 import (
-	"bytes"
 	"crypto/rand"
 	"embed"
-	"encoding/binary"
-	"encoding/json"
 	"encoding/hex"
 	"fmt"
 	"html/template"
-	"image"
-	"image/png"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"mailblogger/blog"
 	"mailblogger/config"
-
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/extension"
-	"golang.org/x/image/draw"
 )
 
 //go:embed templates/*
 var templateFS embed.FS
-
-var md = goldmark.New(
-	goldmark.WithExtensions(
-		extension.GFM,
-		extension.Footnote,
-		extension.DefinitionList,
-	),
-)
 
 type Server struct {
 	Store       *blog.Store
@@ -49,6 +31,9 @@ type Server struct {
 	Site        config.SiteConfig
 	Port        int
 	Addr        string
+	Theme       string
+	ThemeCfg    config.ThemeConfig
+	AutoLang    bool
 	tmpl        *template.Template
 	configGetter func() *config.Config
 	avatarFile  string
@@ -56,7 +41,21 @@ type Server struct {
 	cachedFaviconICO []byte
 }
 
-func NewServer(store *blog.Store, host, scheme, emailLocal, emailDomain string, hideEmail bool, site config.SiteConfig, listenHost string, port int) (*Server, error) {
+// ServerConfig holds the configuration for creating a new Server.
+type ServerConfig struct {
+	Store       *blog.Store
+	Host        string
+	Scheme      string
+	EmailLocal  string
+	EmailDomain string
+	HideEmail   bool
+	Site        config.SiteConfig
+	ListenHost  string
+	Port        int
+	Theme       config.ThemeConfig
+}
+
+func NewServer(cfg ServerConfig) (*Server, error) {
 	funcMap := template.FuncMap{
 		"renderMD":  renderMarkdown,
 		"renderPlaintext": renderPlaintext,
@@ -71,11 +70,11 @@ func NewServer(store *blog.Store, host, scheme, emailLocal, emailDomain string, 
 		"excerpt":  excerpt,
 		"urlencode": url.QueryEscape,
 		"commentImages": func(articleID, commentUID string) []string {
-			imgs, _ := store.ListCommentImages(articleID, commentUID)
+			imgs, _ := cfg.Store.ListCommentImages(articleID, commentUID)
 			return imgs
 		},
 		"authorTooltip": func(authorHash, authorEmail string) string {
-			return authorTooltipFn(store, hideEmail, authorHash, authorEmail)
+			return authorTooltipFn(cfg.Store, cfg.HideEmail, authorHash, authorEmail)
 		},
 	}
 
@@ -85,15 +84,18 @@ func NewServer(store *blog.Store, host, scheme, emailLocal, emailDomain string, 
 	}
 
 	srv := &Server{
-		Store:       store,
-		Host:        host,
-		Scheme:      scheme,
-		EmailLocal:  emailLocal,
-		EmailDomain: emailDomain,
-		HideEmail:   hideEmail,
-		Site:        site,
-		Port:        port,
-		Addr:        listenHost,
+		Store:       cfg.Store,
+		Host:        cfg.Host,
+		Scheme:      cfg.Scheme,
+		EmailLocal:  cfg.EmailLocal,
+		EmailDomain: cfg.EmailDomain,
+		HideEmail:   cfg.HideEmail,
+		Site:        cfg.Site,
+		Port:        cfg.Port,
+		Addr:        cfg.ListenHost,
+		Theme:       cfg.Theme.Theme,
+		ThemeCfg:    cfg.Theme,
+		AutoLang:    cfg.Site.AutoLang,
 		tmpl:        tmpl,
 	}
 	srv.detectAssets()
@@ -185,106 +187,6 @@ func (s *Server) handleRobotsTXT(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "User-agent: *\nAllow: /\nSitemap: %s://%s/sitemap.xml\n", s.Scheme, s.Host)
 }
 
-func (s *Server) detectAssets() {
-	s.avatarFile = s.Store.DetectAvatar()
-	if s.avatarFile != "" {
-		s.Site.Avatar = "/static/" + s.avatarFile
-	}
-	faviconSVG := filepath.Join(s.Store.ContentDir, "favicon.svg")
-	faviconICO := filepath.Join(s.Store.ContentDir, "favicon.ico")
-	svgExists := false
-	if _, err := os.Stat(faviconSVG); err == nil {
-		svgExists = true
-	}
-	icoExists := false
-	if _, err := os.Stat(faviconICO); err == nil {
-		icoExists = true
-	}
-	if svgExists && icoExists {
-		return
-	}
-	if s.avatarFile == "" {
-		return
-	}
-	avatarPath := filepath.Join(s.Store.ContentDir, s.avatarFile)
-	data, err := os.ReadFile(avatarPath)
-	if err != nil {
-		return
-	}
-	ext := s.avatarFile[strings.LastIndex(s.avatarFile, ".")+1:]
-	mime := "image/" + ext
-	if ext == "jpg" {
-		mime = "image/jpeg"
-	}
-	if !svgExists {
-		s.cachedFaviconSVG = []byte(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><image href="data:%s;base64,%s" width="256" height="256"/></svg>`,
-			mime, encodeBase64(data)))
-	}
-	if !icoExists {
-		if img, _, err := image.Decode(bytes.NewReader(data)); err == nil {
-			s.cachedFaviconICO = generateICO(img)
-		}
-	}
-}
-
-func generateICO(src image.Image) []byte {
-	const size = 32
-	resized := image.NewNRGBA(image.Rect(0, 0, size, size))
-	draw.NearestNeighbor.Scale(resized, resized.Bounds(), src, src.Bounds(), draw.Over, nil)
-	var pngBuf bytes.Buffer
-	png.Encode(&pngBuf, resized)
-	pngData := pngBuf.Bytes()
-	pngSize := uint32(len(pngData))
-	headerSize := uint32(6 + 16)
-	ico := make([]byte, headerSize+pngSize)
-	ico[0] = 0
-	ico[1] = 0
-	ico[2] = 1
-	ico[3] = 0
-	ico[4] = 1
-	ico[5] = 0
-	ico[6] = 0
-	ico[7] = 0
-	ico[8] = 32
-	ico[9] = 0
-	ico[10] = 1
-	ico[11] = 0
-	ico[12] = 32
-	ico[13] = 0
-	binary.LittleEndian.PutUint32(ico[14:18], pngSize)
-	binary.LittleEndian.PutUint32(ico[18:22], headerSize)
-	copy(ico[headerSize:], pngData)
-	return ico
-}
-
-func encodeBase64(data []byte) string {
-	const tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-	var buf strings.Builder
-	for i := 0; i < len(data); i += 3 {
-		var b0, b1, b2 byte
-		b0 = data[i]
-		if i+1 < len(data) {
-			b1 = data[i+1]
-		}
-		if i+2 < len(data) {
-			b2 = data[i+2]
-		}
-		buf.WriteByte(tbl[b0>>2])
-		buf.WriteByte(tbl[((b0&3)<<4)|(b1>>4)])
-		if i+1 < len(data) {
-			buf.WriteByte(tbl[((b1&15)<<2)|(b2>>6)])
-		} else {
-			buf.WriteByte('=')
-		}
-		if i+2 < len(data) {
-			buf.WriteByte(tbl[b2&63])
-		} else {
-			buf.WriteByte('=')
-		}
-	}
-	return buf.String()
-}
-
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -343,42 +245,50 @@ func (s *Server) handleArticle(w http.ResponseWriter, r *http.Request, id string
 	s.renderArticleBody(w, article)
 }
 
-// handleSPA serves static files from static/ directory, falls back to index.html
+// handleSPA serves static files from static/ directory, falls back to SSR or theme
 func (s *Server) handleSPA(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/")
 	path = strings.TrimSuffix(path, "/")
 
+	// Try to serve file from static/ directory first
+	if path != "" {
+		filePath := filepath.Join("static", filepath.FromSlash(path))
+		if info, err := os.Stat(filePath); err == nil && !info.IsDir() {
+			http.ServeFile(w, r, filePath)
+			return
+		}
+	}
+
+	// Resolve theme based on language
+	theme := s.resolveTheme(r)
+	if theme != "" {
+		themeDir := filepath.Join("themes", theme)
+		indexPath := filepath.Join(themeDir, "index.html")
+		if _, err := os.Stat(indexPath); err == nil {
+			// Try serving theme static files
+			if path != "" {
+				themeFile := filepath.Join(themeDir, filepath.FromSlash(path))
+				if info, err := os.Stat(themeFile); err == nil && !info.IsDir() {
+					http.ServeFile(w, r, themeFile)
+					return
+				}
+			}
+			http.ServeFile(w, r, indexPath)
+			return
+		}
+	}
+
+	// SSR fallback
 	if path == "" {
-		// Root: try static/index.html first, fall back to SSR index
-	indexPath := filepath.Join("static", "index.html")
-	if _, err := os.Stat(indexPath); err == nil {
-		http.ServeFile(w, r, indexPath)
-		return
-	}
-	s.handleIndex(w, r)
-	return
-	}
-
-	// Try to serve file from static/ directory
-	filePath := filepath.Join("static", filepath.FromSlash(path))
-	if info, err := os.Stat(filePath); err == nil && !info.IsDir() {
-		http.ServeFile(w, r, filePath)
+		s.handleIndex(w, r)
 		return
 	}
 
-	// SPA fallback: serve static/index.html
-	indexPath := filepath.Join("static", "index.html")
-	if _, err := os.Stat(indexPath); err == nil {
-		http.ServeFile(w, r, indexPath)
-		return
-	}
-
-	// Final fallback: SSR article rendering
 	parts := strings.SplitN(path, "/", 2)
 	if len(parts) > 1 && parts[1] != "" {
 		editParts := strings.SplitN(parts[1], "/", 2)
 		if strings.HasPrefix(editParts[0], "edit_") {
-			if !s.Store.History.ArticleVisible {
+			if !s.Store.History.Article.Visible {
 				http.NotFound(w, r)
 				return
 			}
@@ -395,57 +305,27 @@ func (s *Server) handleSPA(w http.ResponseWriter, r *http.Request) {
 	s.handleArticle(w, r, path)
 }
 
+// resolveTheme determines which theme to use based on Accept-Language and config
+func (s *Server) resolveTheme(r *http.Request) string {
+	// If per-language themes are configured and auto_lang is enabled
+	if s.AutoLang && len(s.ThemeCfg.Themes) > 0 {
+		lang := parseAcceptLanguage(r.Header.Get("Accept-Language"))
+		if lang != "" {
+			if theme, ok := s.ThemeCfg.Themes[lang]; ok {
+				return theme
+			}
+		}
+	}
+	// Fallback to resolved theme (single theme or first in map)
+	return s.ThemeCfg.ResolveTheme(s.Site.Lang)
+}
+
 func (s *Server) handleHistoryArticle(w http.ResponseWriter, r *http.Request, id, editDir string) {
-	dir, err := s.Store.GetArticleDir(id)
-	if err != nil {
-		a, err2 := s.Store.GetArticleBySlug(id)
-		if err2 != nil {
-			http.NotFound(w, r)
-			return
-		}
-		dir, err = s.Store.GetArticleDir(a.UniqueID)
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-	}
-
-	editPath := filepath.Join(dir, editDir)
-	indexPath := filepath.Join(editPath, "index.md")
-	data, err := os.ReadFile(indexPath)
+	article, comments, err := s.Store.GetArticleVersion(id, editDir)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-
-	// Parse the historical article
-	meta, body, err := blog.ParseFrontmatterExport(data)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	article := &blog.Article{
-		UniqueID:    meta["uniqueid"],
-		Subject:     meta["subject"],
-		Author:      meta["author"],
-		AuthorHash:  meta["author_hash"],
-		AuthorEmail: meta["author_email"],
-		Banner:      meta["banner"],
-		Body:        body,
-	}
-	if ds := meta["date"]; ds != "" {
-		article.Date, _ = time.Parse(time.RFC3339, ds)
-	}
-	article.Slug = blog.ParseDirSlugExport(filepath.Base(dir))
-
-	// Read historical comments
-	commentsPath := filepath.Join(editPath, "comments.json")
-	commentsData, err := os.ReadFile(commentsPath)
-	var comments []*blog.Comment
-	if err == nil {
-		json.Unmarshal(commentsData, &comments)
-	}
-
 	s.renderArticleBodyWithComments(w, article, comments)
 }
 
@@ -456,40 +336,19 @@ func (s *Server) serveHistoryFile(w http.ResponseWriter, r *http.Request, id, ed
 		return
 	}
 
-	dir, err := s.Store.GetArticleDir(id)
+	path, err := s.Store.GetArticleVersionFilePath(id, editDir, filename)
 	if err != nil {
-		a, err2 := s.Store.GetArticleBySlug(id)
-		if err2 != nil {
-			http.NotFound(w, r)
-			return
-		}
-		dir, err = s.Store.GetArticleDir(a.UniqueID)
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-	}
-
-	editPath := filepath.Join(dir, editDir)
-	if _, err := os.Stat(editPath); os.IsNotExist(err) {
 		http.NotFound(w, r)
 		return
 	}
-
-	if !strings.Contains(filename, ".") {
-		entries, err := filepath.Glob(filepath.Join(editPath, filename+".*"))
-		if err != nil || len(entries) == 0 {
-			http.NotFound(w, r)
-			return
-		}
-		http.ServeFile(w, r, entries[0])
-		return
-	}
-	http.ServeFile(w, r, filepath.Join(editPath, filename))
+	http.ServeFile(w, r, path)
 }
 
 func (s *Server) renderArticleBody(w http.ResponseWriter, article *blog.Article) {
-	comments, err := s.Store.GetComments(article.UniqueID)
+	comments, err := s.Store.GetFilteredComments(article.UniqueID, blog.FilterOptions{
+		ShowDeleted: s.Store.History.ShowDeleted,
+		ShowReplies: s.Store.History.ShowReplies,
+	})
 	if err != nil {
 		comments = nil
 	}
@@ -497,33 +356,6 @@ func (s *Server) renderArticleBody(w http.ResponseWriter, article *blog.Article)
 }
 
 func (s *Server) renderArticleBodyWithComments(w http.ResponseWriter, article *blog.Article, comments []*blog.Comment) {
-	// Filter deleted comments based on config
-	var filtered []*blog.Comment
-	deletedIDs := make(map[string]bool)
-	for _, c := range comments {
-		if c.Deleted {
-			deletedIDs[c.UniqueID] = true
-			if s.Store.History.ShowDeleted {
-				filtered = append(filtered, c)
-			}
-		} else {
-			filtered = append(filtered, c)
-		}
-	}
-
-	// Filter replies to deleted comments if ShowReplies is false
-	if !s.Store.History.ShowReplies {
-		var withReplies []*blog.Comment
-		for _, c := range filtered {
-			if c.ReplyTo != "" && c.ReplyTo != article.UniqueID && deletedIDs[c.ReplyTo] {
-				continue
-			}
-			withReplies = append(withReplies, c)
-		}
-		filtered = withReplies
-	}
-	comments = filtered
-
 	commentMap := make(map[string]*blog.Comment)
 	for _, c := range comments {
 		commentMap[c.UniqueID] = c
@@ -585,7 +417,7 @@ func (s *Server) renderArticleBodyWithComments(w http.ResponseWriter, article *b
 		"Comments":     displayComments,
 		"UnreferencedImages": unreferenced,
 		"ShowDeleted":  s.Store.History.ShowDeleted,
-		"CommentVisible": s.Store.History.CommentVisible,
+		"CommentVisible": s.Store.History.Comment.Visible,
 	}
 
 	if err := s.tmpl.ExecuteTemplate(w, "article.html", data); err != nil {
@@ -625,219 +457,6 @@ func (s *Server) serveArticleFile(w http.ResponseWriter, r *http.Request, articl
 		return
 	}
 	http.ServeFile(w, r, filepath.Join(dir, filename))
-}
-
-var urlRe = regexp.MustCompile(`https?://[^\s<>"]+|www\.[^\s<>"]+`)
-
-func renderPlaintext(input string) template.HTML {
-	escaped := template.HTMLEscapeString(input)
-	escaped = urlRe.ReplaceAllStringFunc(escaped, func(rawURL string) string {
-		href := rawURL
-		if !strings.HasPrefix(href, "http") {
-			href = "https://" + href
-		}
-		safeHref := template.HTMLEscapeString(href)
-		safeText := template.HTMLEscapeString(rawURL)
-		return fmt.Sprintf(`<a href="%s">%s</a>`, safeHref, safeText)
-	})
-	escaped = strings.ReplaceAll(escaped, "\n", "<br>")
-	return template.HTML(escaped)
-}
-
-func findImageRefs(body string) map[string]bool {
-	refs := make(map[string]bool)
-	for i := 0; i < len(body); {
-		start := strings.Index(body[i:], "![")
-		if start < 0 {
-			break
-		}
-		start += i
-		paren := strings.Index(body[start:], "](")
-		if paren < 0 {
-			i = start + 2
-			continue
-		}
-		paren += start + 2
-		end := strings.Index(body[paren:], ")")
-		if end < 0 {
-			break
-		}
-		name := body[paren : paren+end]
-		refs[name] = true
-		i = paren + end + 1
-	}
-	return refs
-}
-
-func renderMarkdown(input string) template.HTML {
-	input = ensureImageBreaks(input)
-	var buf strings.Builder
-	if err := md.Convert([]byte(input), &buf); err != nil {
-		return template.HTML(template.HTMLEscapeString(input))
-	}
-	return template.HTML(wrapImages(buf.String()))
-}
-
-var imgTagReFull = regexp.MustCompile(`<img\s+[^>]*src="([^"]+)"[^>]*alt="([^"]*)"[^>]*>`)
-var imgTagReAltFirst = regexp.MustCompile(`<img\s+[^>]*alt="([^"]*)"[^>]*src="([^"]+)"[^>]*>`)
-var imgTagReNoAlt = regexp.MustCompile(`<img\s+[^>]*src="([^"]+)"[^>]*>`)
-
-func wrapImages(html string) string {
-	html = imgTagReAltFirst.ReplaceAllStringFunc(html, func(match string) string {
-		m := imgTagReAltFirst.FindStringSubmatch(match)
-		if len(m) < 3 {
-			return match
-		}
-		alt, src := m[1], m[2]
-		fig := fmt.Sprintf(`<figure><a href="%s" target="_blank" rel="noopener">%s</a>`, src, match)
-		if alt != "" {
-			fig += fmt.Sprintf(`<figcaption>%s</figcaption>`, alt)
-		}
-		fig += `</figure>`
-		return fig
-	})
-	html = imgTagReFull.ReplaceAllStringFunc(html, func(match string) string {
-		if strings.Contains(match, "<figure") {
-			return match
-		}
-		m := imgTagReFull.FindStringSubmatch(match)
-		if len(m) < 3 {
-			return match
-		}
-		src, alt := m[1], m[2]
-		fig := fmt.Sprintf(`<figure><a href="%s" target="_blank" rel="noopener">%s</a>`, src, match)
-		if alt != "" {
-			fig += fmt.Sprintf(`<figcaption>%s</figcaption>`, alt)
-		}
-		fig += `</figure>`
-		return fig
-	})
-	html = imgTagReNoAlt.ReplaceAllStringFunc(html, func(match string) string {
-		if strings.Contains(match, "<figure") {
-			return match
-		}
-		m := imgTagReNoAlt.FindStringSubmatch(match)
-		if len(m) < 2 {
-			return match
-		}
-		src := m[1]
-		return fmt.Sprintf(`<figure><a href="%s" target="_blank" rel="noopener">%s</a></figure>`, src, match)
-	})
-	return html
-}
-
-func ensureImageBreaks(body string) string {
-	lines := strings.Split(body, "\n")
-	var result []string
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		isImage := strings.HasPrefix(trimmed, "![") && strings.Contains(trimmed, "](") && strings.HasSuffix(trimmed, ")")
-		if isImage {
-			if len(result) > 0 && strings.TrimSpace(result[len(result)-1]) != "" {
-				result = append(result, "")
-			}
-			result = append(result, line)
-			if i+1 < len(lines) && strings.TrimSpace(lines[i+1]) != "" {
-				result = append(result, "")
-			}
-		} else {
-			result = append(result, line)
-		}
-	}
-	return strings.Join(result, "\n")
-}
-
-func makeMailto(uniqueID, subject, emailLocal, emailDomain, body, parentAuthor, parentDate, parentUID, parentHash string, isComment bool) string {
-	addr := fmt.Sprintf("%s+%s@%s", emailLocal, uniqueID, emailDomain)
-	subjPrefix := "Re: " + subject
-	if isComment {
-		subjPrefix += " - Comment"
-	}
-	subjEnc := strings.ReplaceAll(url.QueryEscape(subjPrefix+" #"+parentUID), "+", "%20")
-	link := fmt.Sprintf("mailto:%s?subject=%s", addr, subjEnc)
-	if parentAuthor != "" {
-		rawBody := strings.ReplaceAll(body, "\r\n", "\n")
-		quoted := "> " + strings.ReplaceAll(rawBody, "\n", "\n> ")
-		if len(quoted) > 1200 {
-			quoted = quoted[:1200] + "\n> ..."
-		}
-		var ref strings.Builder
-		ref.WriteString("\n\n\n> ---\n> Write your reply above this line. Only text above will be saved.\n>\n")
-		ref.WriteString(fmt.Sprintf("> On %s, %s (%s) wrote:\n>\n", parentDate, parentAuthor, parentHash))
-		ref.WriteString(quoted)
-		ref.WriteString("\n")
-		enc := strings.ReplaceAll(url.QueryEscape(ref.String()), "+", "%20")
-		link += "&body=" + enc
-	}
-	return link
-}
-
-func toTime(v interface{}) time.Time {
-	switch val := v.(type) {
-	case *blog.Article:
-		return val.Date
-	case blog.Article:
-		return val.Date
-	case *blog.Comment:
-		return val.Date
-	case blog.CommentEdit:
-		return val.Date
-	case *blog.CommentEdit:
-		return val.Date
-	case time.Time:
-		return val
-	}
-	return time.Time{}
-}
-
-func fmtDate(d interface{}) string {
-	t := toTime(d)
-	if t.IsZero() {
-		return ""
-	}
-	return t.UTC().Format("2006-01-02 15:04 UTC")
-}
-
-func fmtDateTitle(d interface{}) string {
-	t := toTime(d)
-	if t.IsZero() {
-		return ""
-	}
-	return fmt.Sprintf("%s (Unix: %d)", t.Format("2006-01-02 15:04:05 -0700"), t.Unix())
-}
-
-func datetimeISO(d interface{}) string {
-	t := toTime(d)
-	if t.IsZero() {
-		return ""
-	}
-	return t.UTC().Format("2006-01-02T15:04:05Z")
-}
-
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
-}
-
-var mdStripRe = regexp.MustCompile(`[#*\[\]!\(\)>|_~` + "`" + `]`)
-
-func excerpt(input string, maxLen int) string {
-	s := mdStripRe.ReplaceAllString(input, "")
-	s = strings.Join(strings.Fields(s), " ")
-	return truncate(s, maxLen)
-}
-
-func authorTooltipFn(store *blog.Store, globalHideEmail bool, authorHash, authorEmail string) string {
-	hide := store.ShouldHideEmail(authorHash, globalHideEmail)
-	if hide {
-		return "hash: " + authorHash
-	}
-	if authorEmail != "" {
-		return authorEmail + "\nhash: " + authorHash
-	}
-	return "hash: " + authorHash
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {

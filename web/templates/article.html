@@ -77,7 +77,7 @@
       <div class="reply-to-info">&#x21b3; <a href="#c-{{.Comment.ReplyTo}}" class="reply-target-link">{{.ReplyTarget}}</a> <a href="#c-{{.Comment.ReplyTo}}" class="reply-target-link uid">#{{.Comment.ReplyTo}}</a></div>
       {{end}}
       {{if .Comment.Deleted}}
-      <div class="comment-body comment-deleted-body"><em>[已删除]</em></div>
+      <div class="comment-body comment-deleted-body"><em>[deleted]</em></div>
       {{else}}
       <div class="comment-body">
         {{renderPlaintext .Comment.Body}}

@@ -1,195 +1,197 @@
 # MailBlogger
 
-Email-to-blog. Send an email, it becomes a post. Reply to a post by email, it becomes a comment.
-
-Styled like a kernel mailing list archive — monospace, left-aligned, zero JavaScript requirement (graceful fallback).
+Email-to-blog. Send an email, it becomes a post. Reply by email, it becomes a comment.
 
 ## Quick Start
 
 ```bash
-# 1. Edit config.yaml with your mail address (IMAP optional, see below)
+# 1. Copy and edit config
+cp config.example.yaml config.yaml
+# Edit mail.address, IMAP/SMTP credentials, whitelist
+
 # 2. Build
 go build -o mailblogger .
 
-# 3. Start web server
+# 3. Start
 ./mailblogger serve
-
 # Open http://localhost:8080
 ```
 
-### Receiving Emails
+## Receiving Emails
 
-MailBlogger supports two ways to receive emails — use either or both:
+**Option A: IMAP polling** — configure `mail.imap` in config.yaml. `./mailblogger serve` polls every 30s. `./mailblogger fetch` for one-shot.
 
-**Option A: IMAP polling** (traditional)
-
-Configure IMAP in `config.yaml` and use `./mailblogger fetch` for one-shot or `./mailblogger serve` for auto-polling every 30s.
-
-**Option B: Cloudflare Email Worker** (webhook, recommended)
-
-No IMAP needed. Cloudflare receives emails and POSTs them to your server in real-time.
-
-1. Set `webhook.secret` in `config.yaml`
-2. Deploy the Worker (see `worker.example.js` + `wrangler.example.toml`)
-3. Configure Email Routing in Cloudflare Dashboard → point to Worker
+**Option B: Cloudflare Email Worker** (recommended) — no IMAP needed. Cloudflare receives emails and POSTs to your server in real-time.
 
 ```yaml
-# config.yaml (webhook-only, no IMAP)
+# config.yaml (webhook-only)
 mail:
   address: blog@example.com
 webhook:
   secret: "your-random-secret"
 ```
 
-## How It Works
+Deploy the Worker (see `worker.example.js` + `wrangler.example.toml`), configure Email Routing in Cloudflare Dashboard.
 
-### Publishing an Article
+Both can run simultaneously.
 
-Send an email to `wmail@owowo.dev` (or whatever address you configure). The sender must be in the whitelist (`config.yaml`).
+## Publishing
+
+Send an email to your blog address. Sender must be in the whitelist.
 
 ```
-From: Your Name <you@example.com>
-To: wmail@owowo.dev
+From: Alice <alice@example.com>
+To: blog@example.com
 Subject: My First Post
 
-Hello World! This is the post body in markdown.
+Hello World! Markdown **supported**.
 ```
 
-### Commenting on an Article
+## Commenting
 
-Every article has an 8-char unique ID displayed on the page. Reply to `wmail+<uniqueid>@owowo.dev`:
+Every article and comment has an 8-char unique ID shown on the page. Reply to `blog+<id>@domain`:
 
 ```
-From: Reader <reader@example.com>
-To: wmail+afd888d6@owowo.dev
+To: blog+afd888d6@example.com
 Subject: Re: My First Post
 
-Great article! I have a question...
+Great article!
 ```
 
-### Replying to a Comment
+## Editing & Deleting
 
-Every comment also has its own unique ID. Send to `wmail+<comment_uniqueid>@owowo.dev`:
+Send to `blog+<article_id>@domain`:
 
-```
-From: Another Reader <other@example.com>
-To: wmail+92d93709@owowo.dev
-Subject: Re: My First Post
+| Subject | Effect |
+|---|---|
+| `edit` | Replace body. Old version archived if `history.article.keep` is true |
+| `delete` | Move to `_deleted/` or permanently remove |
 
-I was wondering the same thing.
-```
+Same for comments: send `edit` or `delete` to `blog+<comment_id>@domain`.
 
-### Notification Emails
+## Body Configuration
 
-When someone replies to your comment, you receive an email notification. The `Reply-To` header points to `wmail+<new_comment_uid>@domain` — just hit Reply in your email client to continue the discussion.
-
-### Editing / Deleting Articles
-
-As the article author, send to `wmail+<article_uid>@owowo.dev`:
-
-| Action | Subject | Effect |
-|---|---|---|
-| Edit | `[EDIT] New Title` | Replaces article body and title |
-| Delete | `[DELETE]` | Removes the entire article directory |
-
-### Body Configuration
-
-Article options can be declared at the beginning of the email body:
+Declare options at the beginning of the email body:
 
 ```
 ---
 banner: 2
 slug: my-post
 notify: on
+title: Custom Title
 ---
 
-Actual article body starts here.
+Article body starts here.
 ```
 
 | Key | Description |
 |---|---|
 | `banner` | Image number to use as page banner (replaces site avatar) |
-| `slug` | Custom URL (same as `[SLUG:xxx]` in subject) |
-| `notify` | `on`/`true` → watch article; `off`/`false` → mute article |
+| `slug` | Custom URL slug (lowercase, digits, dashes) |
+| `title` | Override article title |
+| `notify` | `on`/`true` → watch; `off`/`false` → mute |
 
-Use 3+ dashes as delimiters. If the config block is malformed, you'll receive an error reply.
+## Notification
 
-### Settings
+When someone replies to your comment, you receive a notification email. Hit Reply to continue the discussion — the `Reply-To` header routes back to the thread.
 
-Send an email with subject `settings` to get a link to configure notification preferences and email privacy.
+Send an email with subject `settings` to configure notification preferences.
 
-### Error Replies
+Three-tier priority: per-article override > per-user preference > global default.
 
-If your email can't be processed (invalid config, slug conflict, target not found, etc.), you'll receive an automated error reply explaining the issue.
+## API
+
+Read-only JSON API for building custom frontends. See [docs/api.md](docs/api.md).
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/site` | Site information |
+| `GET /api/articles` | All articles |
+| `GET /api/article/{id}` | Article detail (by hash or slug) |
+| `GET /api/article/{id}/comments` | Article comments |
+| `POST /api/article` | Create article |
+| `POST /api/comment` | Create comment |
+| `POST /api/raw-email` | Webhook: receive raw email |
+
+## Themes
+
+Themes control the entire frontend. Set `theme` in config.yaml:
+
+```yaml
+theme: default
+```
+
+Theme files go in `themes/<name>/`. See [docs/themes.md](docs/themes.md) for the full theme authoring guide.
 
 ## Configuration
 
+See `config.example.yaml` for all options. Key fields:
+
 ```yaml
-# config.yaml
 mail:
-  address: wmail@owowo.dev
-  imap:                              # optional — omit to disable IMAP polling
-    server: imap.purelymail.com
-    port: 993
-    username: wmail@owowo.dev
-    password: your-password-here
+  address: blog@example.com
+  imap:
+    server: imap.example.com
+    username: blog@example.com
+    password: your-password
   smtp:
-    server: smtp.purelymail.com
+    server: smtp.example.com
     port: 465
-    # username and password fall back to IMAP credentials if not set
-  whitelist:                 # allowed article authors
-    - "*@owowo.dev"
-
-webhook:                     # Cloudflare Email Worker webhook
-  secret: "your-secret"      # must match Worker's WEBHOOK_SECRET env var
-
-content_dir: content       # where articles are stored
+  whitelist:
+    - "*@example.com"
 
 site:
-  title: My Blog           # displayed in header
-  subtitle: ""             # optional tagline
-  footer_html: ""          # HTML footer (supports <a>, <script>, etc.)
+  lang: en
+  show_author: true
+  width: 600
 
 web:
   port: 8080
-  host: 0.0.0.0
+
+privacy:
+  hide_email: true
+
+history:
+  article:
+    keep: true
+  comment:
+    keep: true
+  show_deleted: true
 ```
+
+All config fields are hot-reloadable — edit `config.yaml` and changes take effect immediately.
 
 ## Content Structure
 
 ```
 content/
-├── 20260713_afd888d6_hello-world/   # date_hash_slug
-│   ├── index.md                     # frontmatter YAML + markdown body
-│   ├── comments.md                  # multiple YAML-document blocks
-│   ├── 1.webp                       # article images (sequential)
-│   └── c_92d93709_1.png             # comment images
-├── _drafts/                         # non-whitelisted submissions
-└── mailblogger.db                   # SQLite (tokens, prefs, watchers)
+├── 20260713_afd888d6_hello-world/
+│   ├── index.md           # frontmatter + markdown body
+│   ├── comments.json      # JSON array of comments
+│   ├── 1.webp             # article images
+│   └── edit_0/            # archived version (if history enabled)
+├── _drafts/               # non-whitelisted submissions
+├── _deleted/              # archived deleted articles
+└── mailblogger.db         # SQLite metadata
 ```
 
 ## Privacy
 
-- Author names come from the email's From header display name (e.g., `Alice` from `Alice <a@b.com>`)
-- If no name is set, a hash of the email address is shown instead
-- Author email visibility is controlled by `privacy.hide_email` (default: hidden) and per-user preferences
-- Each author is identified by a stable `author_hash` (SHA256 of email, first 8 chars)
-- Unique IDs are shown on all articles and comments
-- Visitors can contact authors via `blog+<author_hash>@domain` without seeing the real address
+- Author names from email `From:` header; fallback to hash
+- Author emails hidden by default (`privacy.hide_email`)
+- Visitors contact authors via `blog+<author_hash>@domain` without seeing real addresses
+- Notification `Reply-To` routes through blog, not the replier's address
 
-## Testing
-
-A test SMTP sender is provided for development:
+## Docker
 
 ```bash
-cd tools && go build -o sendmail sendmail.go
-
-# Send a test article
-./sendmail "wmail@owowo.dev" "Hello World" "# Post body in markdown"
-
-# Send a test comment (replace <uid> with actual article ID)
-./sendmail -name "Alice" -from "alice@example.com" "wmail+<uid>@owowo.dev" "Re: Hello" "Great post!"
-
-# Then process
-cd .. && ./mailblogger fetch
+docker build -t mailblogger .
+docker run -p 8080:8080 \
+  -v ./config.yaml:/app/config.yaml \
+  -v ./content:/app/content \
+  mailblogger
 ```
+
+## License
+
+MIT

@@ -1,0 +1,16 @@
+{
+  "comments": "Comments",
+  "reply": "[reply]",
+  "copy_address": "[copy reply address]",
+  "deleted": "[deleted]",
+  "no_comments": "No comments yet.",
+  "no_articles": "No articles yet. Send an email to {{email}} to start blogging.",
+  "back_to_index": "\u2190 Back to index",
+  "edit_history": "Edit history",
+  "notify_hint": "Send <code>settings</code> in email subject to configure your notification preferences.",
+  "attachments": "Attachments",
+  "page_of": "Page {{page}} of {{total}}",
+  "newer": "\u2190 Newer",
+  "older": "Older \u2192",
+  "write_reply": "Write your reply above this line. Only text above will be saved."
+}

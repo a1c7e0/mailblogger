@@ -54,7 +54,7 @@ func TestParseFrontmatter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			meta, body, err := parseFrontmatter([]byte(tt.input))
+			meta, body, err := ParseFrontmatter([]byte(tt.input))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -92,7 +92,7 @@ Second comment body`
 		t.Fatalf("expected 2 blocks, got %d", len(blocks))
 	}
 
-	meta1, body1, err := parseFrontmatter(blocks[0])
+	meta1, body1, err := ParseFrontmatter(blocks[0])
 	if err != nil {
 		t.Fatalf("block 1 parse error: %v", err)
 	}
@@ -103,7 +103,7 @@ Second comment body`
 		t.Errorf("block 1 body = %q, want 'First comment body'", body1)
 	}
 
-	meta2, body2, err := parseFrontmatter(blocks[1])
+	meta2, body2, err := ParseFrontmatter(blocks[1])
 	if err != nil {
 		t.Fatalf("block 2 parse error: %v", err)
 	}
@@ -135,7 +135,7 @@ Single comment`
 		t.Fatalf("expected 1 block, got %d", len(blocks))
 	}
 
-	meta, body, _ := parseFrontmatter(blocks[0])
+	meta, body, _ := ParseFrontmatter(blocks[0])
 	if meta["uniqueid"] != "abc123" {
 		t.Errorf("uniqueid = %q, want abc123", meta["uniqueid"])
 	}
@@ -155,7 +155,7 @@ author: Alice
 		t.Fatalf("expected 1 block, got %d", len(blocks))
 	}
 
-	meta, body, _ := parseFrontmatter(blocks[0])
+	meta, body, _ := ParseFrontmatter(blocks[0])
 	if meta["uniqueid"] != "abc123" {
 		t.Errorf("uniqueid = %q, want abc123", meta["uniqueid"])
 	}
@@ -172,7 +172,7 @@ func TestSplitCommentBlocksNoFrontmatter(t *testing.T) {
 		t.Fatalf("expected 1 block, got %d", len(blocks))
 	}
 
-	meta, body, _ := parseFrontmatter(blocks[0])
+	meta, body, _ := ParseFrontmatter(blocks[0])
 	if len(meta) != 0 {
 		t.Errorf("meta should be empty, got %v", meta)
 	}
@@ -236,10 +236,10 @@ func TestParseDirHash(t *testing.T) {
 }
 
 func TestParseDirSlug(t *testing.T) {
-	if s := parseDirSlug("20260713_abc123_my-slug"); s != "my-slug" {
-		t.Errorf("parseDirSlug = %q, want my-slug", s)
+	if s := ParseDirSlug("20260713_abc123_my-slug"); s != "my-slug" {
+		t.Errorf("ParseDirSlug = %q, want my-slug", s)
 	}
-	if s := parseDirSlug("20260713_abc123"); s != "" {
-		t.Errorf("parseDirSlug (no slug) = %q, want empty", s)
+	if s := ParseDirSlug("20260713_abc123"); s != "" {
+		t.Errorf("ParseDirSlug (no slug) = %q, want empty", s)
 	}
 }

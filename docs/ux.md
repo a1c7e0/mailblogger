@@ -1,38 +1,34 @@
 # UX & Frontend
 
-## Page Design
+## Layout
 
-- **Layout**: left-aligned, `max-width: 600px`, monospace font stack
-- **Banner**: site avatar at page top, full `600px` width, flush to container edges (offset padding via negative margins). Auto-detected from `content/avatar.{png,jpg,webp,svg}`. Articles with `banner` in body config replace the avatar with the specified image (same position, same styling).
-- **Nav links**: configured via `site.links`, displayed as a flex row with `gap: 14px` between items.
-- **Styling**: lore.kernel.org inspired — minimal borders, no shadows, flat design
-- **Dark mode**: `@media (prefers-color-scheme: dark)` with dark backgrounds and lighter text
-- **Blue hierarchy**: article links `#1a5c8a` → reply links `#3377bb` → copy links `#5588bb`
+- Left-aligned, `max-width: 600px`, monospace font stack
+- Banner: site avatar or article banner image, full width, flush to container
+- Dark mode via `@media (prefers-color-scheme: dark)`
+- Blue hierarchy: article links `#1a5c8a` → reply links `#3377bb` → copy links `#5588bb`
 
 ## Timestamps
 
-### Server-Side
-Dates stored as RFC3339 with timezone. Rendered as `<time datetime="ISO8601">` elements.
-
-### Client-Side
-JavaScript on page load converts all `<time>` elements to client local timezone:
-- Index page: date only (`YYYY-MM-DD`) via `data-format="date"`
-- Article/comments: datetime with timezone (`YYYY-MM-DD HH:MM ±TZOFF`)
-
-### Fallback
-If JavaScript disabled, dates display as UTC.
-
-### Tooltip
-Hovering any date shows: `YYYY-MM-DD HH:MM:SS +0000 (Unix: 1234567890)`
+- Server: RFC3339 with timezone, rendered as `<time datetime="...">` elements
+- Client: JS converts to local timezone on page load
+- Index: date only (`YYYY-MM-DD`); article/comments: datetime with timezone
+- Tooltip: `YYYY-MM-DD HH:MM:SS +0000 (Unix: ...)`
 
 ## Interactive Elements
 
-### Reply
-`mailto:` link opens default email client with To and Subject pre-filled. Subject format: `Re: <article> - Comment #<uid>`.
+- **Reply**: `mailto:` link with pre-filled To, Subject, quoted body (max 1200 chars)
+- **Copy address**: `<mailbox>+<uid>@domain` to clipboard, `[copied]` for 1.5s
+- **Copy permalink**: `/<slug>#c-<uid>` to clipboard via `#uniqueid` click
+- **Comment highlight**: click `↳ author #uid` → outline + scroll to target; `#c-<id>` in URL triggers on load
 
-For comment replies, body is pre-filled with:
+## Pagination
+
+`?page=N`, 20 articles/page. `← Newer` / `Older →` links.
+
+## Reply Body Format
+
 ```
-(blank space for reply)
+(reply space)
 
 
 > ---
@@ -43,80 +39,30 @@ For comment replies, body is pre-filled with:
 > > <quoted text>
 ```
 
-All reference lines have `>` prefix so `stripEmailQuotes()` cleanly separates user input. Spaces use `%20` (not `+`). User writes above the first `>` line; everything below gets discarded.
-
-### Copy Reply Address
-Copies `<mailbox>+<uniqueid>@domain` to clipboard. Changes to `[copied]` for 1.5s.
-
-### Copy Permalink via UID
-Clicking any `#uniqueid` copies the permalink to clipboard:
-- Index / article top (no slug): `http://host/<hash>`
-- Index / article top (with slug): `http://host/<slug>`
-- Comment: `http://host/<hash-or-slug>#c-<comment_uid>`
-
-Text changes to `[copied]` for 1.5s after clicking.
-
-### Comment Highlighting
-Clicking `↳ <author> #<uid>` link:
-1. Removes `.highlight` from all comments
-2. Adds `.highlight` to target comment (`outline: 2px solid blue`)
-3. Scrolls to target smoothly
-4. URL hash (`#c-<id>`) also triggers highlight on page load
-
-## Pagination
-
-- `?page=N` query parameter, 20 articles per page
-- Previous/Next links with `← Newer` / `Older →`
-- Shows `Page N of M` between navigation links
-- Placed above footer content, below footer border
-
-## Notification Hint
-
-Below comments section, a small hint indicates current notification status:
-- `notify: false` → "Notifies are off — add [NOTIFY] in subject to enable."
-- `notify: true` → "Notifies are on — add [MUTE] in subject to suppress."
-
-## Responsive Design
-
-- `max-width: 720px` container
-- `font-size: 14px` base
-- Tables collapse for small screens (natural overflow)
-- Copy/paste friendly layout
-
-## Configurable Elements
-
-- `site.title` — header text
-- `site.subtitle` — tagline below header
-- `site.footer_html` — raw HTML footer (supports links, scripts, etc.)
-- `site.show_author` — show/hide author on index page
+All reference lines `>` prefixed for clean `stripEmailQuotes()` separation.
 
 ## Images
 
-### Article Images
-- Images attached to email articles are saved as sequential files: `1.webp`, `2.gif`, etc.
-- Referenced in markdown as `![alt](1)` — extension not required
-- `ensureImageBreaks()` ensures blank lines around every image reference, so each renders on its own line
-- `wrapImages()` post-processes rendered HTML: each `<img>` is wrapped in `<figure>` (centered), `<a target="_blank" rel="noopener">` (clickable, opens in new tab), and `<figcaption>` (displays alt text below image)
-- Max height 400px, max width 100%
-- Unreferenced images shown in "Attachments" section below article body, separated by `<hr>` and `<h4>` heading
+- **Article images**: sequential files (`1.webp`), referenced as `![alt](1)` (no extension)
+- **`<base>` tag**: ensures relative `src="1"` resolves to `/slug/1`
+- **wrapImages()**: `<img>` → `<figure>` + `<a target="_blank">` + `<figcaption>`
+- **Unreferenced images**: shown in "Attachments" section below article
+- **Comment images**: `c_<uid>_<N>.<ext>`, shown as clickable filename links (not inline)
+- **Feed images**: relative paths rewritten to absolute URLs
 
-### Comment Images
-- Saved as `c_<commentUID>_<N>.<ext>` in the parent article's directory
-- Displayed as clickable filename hyperlinks (`target="_blank"`) below the comment body
-- NOT rendered inline — clicking the link opens the image file in a new tab
+## SPA Navigation (`static/spa.js`)
 
-### `<base>` Tag
-Article pages include `<base href="/slug-or-id/">` in `<head>`. This ensures relative `img src` values (e.g., `src="1"`) resolve to `/slug-or-id/1` instead of `/1`. Updated dynamically during SPA navigation.
-
-### Feed Images
-Atom feeds rewrite relative `<img src>` to absolute URLs (`http://host/articleID/filename`) so images display correctly in feed readers.
-
-## SPA Navigation
-
-Internal link clicks are intercepted by `static/spa.js`:
-- `<main>` content is replaced; header title/nav and footer (music player) persist
-- Banner area (`.header-banner-area`) is swapped: avatar shows on index, article banner shows on articles with banner
-- `<base>` tag and URL updated via `history.pushState()`
-- `initPage()` re-binds event handlers after content replacement
-- External links, `mailto:`, `target="_blank"`, `/static/*`, `/feed*` are not intercepted
+- Intercepts internal link clicks
+- Replaces `<main>` content, swaps banner area
+- Updates `<base>` tag and URL via `history.pushState()`
+- Header/nav/footer persist across navigations
+- External links, `mailto:`, `target="_blank"`, `/static/*`, `/feed*` not intercepted
 - Browser back/forward triggers full reload
+
+## Configurable Elements
+
+- `site.lang` — language
+- `site.show_author` — show/hide author on index
+- `site.width` — max content width
+- `site.links` — nav links below subtitle
+- `site.auto_lang` — Accept-Language detection for per-language themes

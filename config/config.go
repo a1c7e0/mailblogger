@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -15,6 +16,7 @@ type Config struct {
 	Privacy    PrivacyConfig `yaml:"privacy"`
 	Webhook    WebhookConfig `yaml:"webhook"`
 	History    HistoryConfig `yaml:"history"`
+	Theme      ThemeConfig   `yaml:"theme"`
 
 	Host string `yaml:"-"`
 
@@ -50,15 +52,12 @@ type SMTPConfig struct {
 }
 
 type SiteConfig struct {
-	Title       string    `yaml:"title"`
-	Subtitle    string    `yaml:"subtitle"`
-	Description string    `yaml:"description"`
 	Lang        string    `yaml:"lang"`
-	FooterHTML  string    `yaml:"footer_html"`
 	ShowAuthor  bool      `yaml:"show_author"`
 	Avatar      string    `yaml:"-"`
 	Width       int       `yaml:"width"`
 	Links       []NavLink `yaml:"links"`
+	AutoLang    bool      `yaml:"auto_lang"`
 }
 
 type NavLink struct {
@@ -80,6 +79,43 @@ type WebhookConfig struct {
 	Secret string `yaml:"secret"`
 }
 
+// ThemeConfig handles both string and map YAML for theme field
+type ThemeConfig struct {
+	// Single theme mode: Theme is set
+	Theme string
+	// Per-language mode: Themes map is set
+	Themes map[string]string
+}
+
+func (t *ThemeConfig) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		t.Theme = value.Value
+	case yaml.MappingNode:
+		t.Themes = make(map[string]string)
+		for i := 0; i < len(value.Content)-1; i += 2 {
+			t.Themes[value.Content[i].Value] = value.Content[i+1].Value
+		}
+	default:
+		return fmt.Errorf("theme must be a string or map")
+	}
+	return nil
+}
+
+// ResolveTheme returns the theme directory name for the given language
+func (t *ThemeConfig) ResolveTheme(lang string) string {
+	if len(t.Themes) > 0 {
+		if theme, ok := t.Themes[lang]; ok {
+			return theme
+		}
+		// Fallback to first theme
+		for _, theme := range t.Themes {
+			return theme
+		}
+	}
+	return t.Theme
+}
+
 type HistoryConfig struct {
 	Article HistoryToggle `yaml:"article"`
 	Comment HistoryToggle `yaml:"comment"`
@@ -98,7 +134,7 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	cfg := &Config{
-		Site: SiteConfig{ShowAuthor: true, Lang: "en"},
+		Site: SiteConfig{ShowAuthor: true, Lang: "en", Width: 600},
 		History: HistoryConfig{
 			Article:     HistoryToggle{Keep: true, Visible: true},
 			Comment:     HistoryToggle{Keep: true, Visible: true},
@@ -121,9 +157,6 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Host == "" {
 		cfg.Host = cfg.EmailDomain
-	}
-	if cfg.Site.Title == "" {
-		cfg.Site.Title = "MailBlogger"
 	}
 	if cfg.Site.Width == 0 {
 		cfg.Site.Width = 600
