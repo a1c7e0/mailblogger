@@ -101,22 +101,6 @@ func FetchUnseen(c *client.Client) ([]*RawMessage, error) {
 	return results, nil
 }
 
-func MarkAsSeen(c *client.Client, seqNums []uint32) error {
-	if len(seqNums) == 0 {
-		return nil
-	}
-
-	seqSet := new(imap.SeqSet)
-	seqSet.AddNum(seqNums...)
-
-	item := imap.FormatFlagsOp(imap.AddFlags, true)
-	flags := []interface{}{imap.SeenFlag}
-	if err := c.Store(seqSet, item, flags, nil); err != nil {
-		return fmt.Errorf("mark seen: %w", err)
-	}
-	return nil
-}
-
 func DeleteEmails(c *client.Client, seqNums []uint32) error {
 	if len(seqNums) == 0 {
 		return nil
@@ -148,7 +132,7 @@ func parseMessage(msg *imap.Message) (*RawMessage, error) {
 				Address: to.MailboxName + "@" + to.HostName,
 			})
 		}
-		raw.Subject = msg.Envelope.Subject
+		raw.Subject = decodeMIMEHeader(msg.Envelope.Subject)
 		if !msg.Envelope.Date.IsZero() {
 			raw.Date = msg.Envelope.Date.Format("Mon, 02 Jan 2006 15:04:05 -0700")
 		}
@@ -162,12 +146,44 @@ func parseMessage(msg *imap.Message) (*RawMessage, error) {
 				continue
 			}
 			raw.RawBody = data
-			parseRawBody(raw)
+			parsed, err := mail.ReadMessage(strings.NewReader(string(data)))
+			if err == nil {
+				raw.Body, raw.HTMLBody, raw.Images = parseBodyParts(parsed)
+			}
 			break
 		}
 	}
 
 	return raw, nil
+}
+
+// parseBodyParts extracts body, HTML body, and images from a parsed mail.Message.
+// This is the shared body extraction logic used by both ParseRawEmail and parseMessage.
+func parseBodyParts(parsed *mail.Message) (body, html string, images []ImageData) {
+	mediaType, params, _ := getContentType(parsed)
+
+	if mediaType == "text/plain" {
+		data, _ := io.ReadAll(parsed.Body)
+		enc := strings.ToLower(parsed.Header.Get("Content-Transfer-Encoding"))
+		if b := decodeBody(data, enc); b != "" {
+			body = cleanBody(b)
+		}
+	} else if strings.HasPrefix(mediaType, "multipart/") {
+		boundary := params["boundary"]
+		if boundary != "" {
+			body, html, images = extractMultipartAll(parsed.Body, boundary, 0)
+			if body != "" {
+				body = cleanBody(body)
+			}
+		}
+	} else if mediaType == "text/html" {
+		data, _ := io.ReadAll(parsed.Body)
+		enc := strings.ToLower(parsed.Header.Get("Content-Transfer-Encoding"))
+		html = decodeBody(data, enc)
+		body = cleanBody(htmlToMarkdown(html))
+	}
+
+	return
 }
 
 // ParseRawEmail parses a raw RFC 2822 email (e.g. from a Cloudflare Worker)
@@ -186,7 +202,7 @@ func ParseRawEmail(rawBytes []byte) (*RawMessage, error) {
 	if toList, err := mail.ParseAddressList(parsed.Header.Get("To")); err == nil {
 		raw.To = toList
 	}
-	raw.Subject = parsed.Header.Get("Subject")
+	raw.Subject = decodeMIMEHeader(parsed.Header.Get("Subject"))
 	raw.MessageID = parsed.Header.Get("Message-Id")
 	if dateStr := parsed.Header.Get("Date"); dateStr != "" {
 		if t, err := mail.ParseDate(dateStr); err == nil {
@@ -194,153 +210,13 @@ func ParseRawEmail(rawBytes []byte) (*RawMessage, error) {
 		}
 	}
 
-	mediaType, params, _ := getContentType(parsed)
-	if mediaType == "text/plain" {
-		body, _ := io.ReadAll(parsed.Body)
-		enc := strings.ToLower(parsed.Header.Get("Content-Transfer-Encoding"))
-		if b := decodeBody(body, enc); b != "" {
-			raw.Body = cleanBody(b)
-		}
-	} else if strings.HasPrefix(mediaType, "multipart/") {
-		boundary := params["boundary"]
-		if boundary != "" {
-			raw.Body, raw.HTMLBody, raw.Images = extractMultipartAll(parsed.Body, boundary, 0)
-			if raw.Body != "" {
-				raw.Body = cleanBody(raw.Body)
-			}
-		}
-	} else if mediaType == "text/html" {
-		body, _ := io.ReadAll(parsed.Body)
-		enc := strings.ToLower(parsed.Header.Get("Content-Transfer-Encoding"))
-		raw.HTMLBody = decodeBody(body, enc)
-		raw.Body = cleanBody(htmlToMarkdown(raw.HTMLBody))
-	}
+	raw.Body, raw.HTMLBody, raw.Images = parseBodyParts(parsed)
 
 	return raw, nil
 }
 
-// parseRawBody extracts body, HTML, and images from raw.RawBody.
-func parseRawBody(raw *RawMessage) {
-	parsed, err := mail.ReadMessage(strings.NewReader(string(raw.RawBody)))
-	if err != nil {
-		return
-	}
-
-	mediaType, params, _ := getContentType(parsed)
-
-	if mediaType == "text/plain" {
-		body, _ := io.ReadAll(parsed.Body)
-		enc := strings.ToLower(parsed.Header.Get("Content-Transfer-Encoding"))
-		if b := decodeBody(body, enc); b != "" {
-			raw.Body = cleanBody(b)
-		}
-	} else if strings.HasPrefix(mediaType, "multipart/") {
-		boundary := params["boundary"]
-		if boundary != "" {
-			raw.Body, raw.HTMLBody, raw.Images = extractMultipartAll(parsed.Body, boundary, 0)
-			if raw.Body != "" {
-				raw.Body = cleanBody(raw.Body)
-			}
-		}
-	} else if mediaType == "text/html" {
-		body, _ := io.ReadAll(parsed.Body)
-		enc := strings.ToLower(parsed.Header.Get("Content-Transfer-Encoding"))
-		raw.HTMLBody = decodeBody(body, enc)
-		raw.Body = cleanBody(htmlToMarkdown(raw.HTMLBody))
-	}
-}
-
-func extractTextBody(msg *mail.Message) string {
-	mediaType, params, err := getContentType(msg)
-	if err != nil {
-		return ""
-	}
-
-	if mediaType == "text/plain" {
-		body, _ := io.ReadAll(msg.Body)
-		enc := strings.ToLower(msg.Header.Get("Content-Transfer-Encoding"))
-		return decodeBody(body, enc)
-	}
-
-	if strings.HasPrefix(mediaType, "multipart/") {
-		boundary := params["boundary"]
-		result, err := extractMultipart(msg.Body, boundary, 0)
-		if err == nil {
-			return result
-		}
-	}
-
-	if mediaType == "text/html" {
-		body, _ := io.ReadAll(msg.Body)
-		enc := strings.ToLower(msg.Header.Get("Content-Transfer-Encoding"))
-		return htmlToMarkdown(decodeBody(body, enc))
-	}
-
-	return ""
-}
-
 const maxMultipartDepth = 5
 const maxParts = 100
-
-func extractMultipart(body io.Reader, boundary string, depth int) (string, error) {
-	if boundary == "" {
-		return "", fmt.Errorf("empty boundary")
-	}
-	if depth >= maxMultipartDepth {
-		return "", fmt.Errorf("multipart depth exceeded")
-	}
-	mr := multipart.NewReader(body, boundary)
-	firstHTML := ""
-	partCount := 0
-	for {
-		part, err := mr.NextPart()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			break
-		}
-		partCount++
-		if partCount > maxParts {
-			break
-		}
-		ct, params, _ := mime.ParseMediaType(part.Header.Get("Content-Type"))
-		if ct == "" {
-			continue
-		}
-
-		if strings.HasPrefix(ct, "multipart/") {
-			if subBoundary := params["boundary"]; subBoundary != "" {
-				if sub, err := extractMultipart(part, subBoundary, depth+1); err == nil && sub != "" {
-					if firstHTML == "" && isHTMLContentType(ct) {
-						firstHTML = sub
-					}
-					if !isHTMLContentType(ct) {
-						return sub, nil
-					}
-				}
-			}
-			continue
-		}
-
-		enc := strings.ToLower(part.Header.Get("Content-Transfer-Encoding"))
-		bodyBytes, _ := io.ReadAll(part)
-		decoded := decodeBody(bodyBytes, enc)
-		if decoded == "" {
-			continue
-		}
-		if ct == "text/plain" {
-			return decoded, nil
-		}
-		if ct == "text/html" && firstHTML == "" {
-			firstHTML = decoded
-		}
-	}
-	if firstHTML != "" {
-		return htmlToMarkdown(firstHTML), nil
-	}
-	return "", fmt.Errorf("no text/plain or text/html part found")
-}
 
 func extractMultipartAll(body io.Reader, boundary string, depth int) (text, html string, images []ImageData) {
 	if boundary == "" || depth >= maxMultipartDepth {
@@ -447,10 +323,6 @@ func extractMultipartAll(body io.Reader, boundary string, depth int) (text, html
 	return
 }
 
-func isHTMLContentType(ct string) bool {
-	return ct == "text/html" || ct == "multipart/alternative"
-}
-
 func getContentType(msg *mail.Message) (string, map[string]string, error) {
 	ct := msg.Header.Get("Content-Type")
 	if ct == "" {
@@ -476,34 +348,6 @@ func decodeBody(data []byte, enc string) string {
 		}
 	}
 	return strings.TrimSpace(body)
-}
-
-func scanMIMEPartsForHTML(body io.Reader, header mail.Header) string {
-	ct := header.Get("Content-Type")
-	mediaType, params, _ := mime.ParseMediaType(ct)
-	if mediaType == "text/html" {
-		data, _ := io.ReadAll(body)
-		enc := strings.ToLower(header.Get("Content-Transfer-Encoding"))
-		return decodeBody(data, enc)
-	}
-	if !strings.HasPrefix(mediaType, "multipart/") || params["boundary"] == "" {
-		return ""
-	}
-	mr := multipart.NewReader(body, params["boundary"])
-	for {
-		part, err := mr.NextPart()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			break
-		}
-		hdr := mail.Header(part.Header)
-		if result := scanMIMEPartsForHTML(part, hdr); result != "" {
-			return result
-		}
-	}
-	return ""
 }
 
 func cleanBody(body string) string {
@@ -558,4 +402,15 @@ func htmlToMarkdown(html string) string {
 		text = newText
 	}
 	return strings.TrimSpace(text)
+}
+
+// decodeMIMEHeader decodes MIME encoded-words in email headers (e.g. =?UTF-8?B?...?=).
+// Returns the original string if decoding fails.
+func decodeMIMEHeader(s string) string {
+	dec := new(mime.WordDecoder)
+	decoded, err := dec.DecodeHeader(s)
+	if err != nil {
+		return s
+	}
+	return decoded
 }
