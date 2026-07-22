@@ -34,6 +34,7 @@ a:hover {
 .container {
   margin: 0;
   padding: 16px 24px 32px;
+  max-width: 640px;
 }
 
 .header {
