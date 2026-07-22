@@ -6,4 +6,5 @@ services:
     volumes:
       - ./content:/app/content
       - ./config.yaml:/app/config.yaml:ro
+      - ./themes:/app/themes
     restart: unless-stopped
