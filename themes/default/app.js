@@ -58,7 +58,10 @@
       }
       return '<figure><a href="' + src + '" target="_blank" rel="noopener"><img src="' + src + '" alt="' + alt + '"></a>' + (alt ? '<figcaption>' + alt + '</figcaption>' : '') + '</figure>';
     });
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(m, text, url) {
+      var isExternal = url.startsWith('http://') || url.startsWith('https://');
+      return '<a href="' + url + '"' + (isExternal ? ' target="_blank"' : '') + '>' + text + '</a>';
+    });
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
@@ -80,7 +83,7 @@
   function fmtDate(dateStr) {
     const d = new Date(dateStr);
     const pad = function(n) { return String(n).padStart(2, '0'); };
-    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ' UTC';
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
   }
 
   function fmtDateShort(dateStr) {
@@ -90,7 +93,25 @@
   }
 
   function datetimeISO(dateStr) {
-    return new Date(dateStr).toISOString().replace(/\.\d+Z$/, 'Z');
+    return new Date(dateStr).toISOString().replace(/\.\\d+Z$/, 'Z');
+  }
+
+  function getTzOffset(dateStr) {
+    if (dateStr.endsWith('Z')) return '+00:00';
+    var m = dateStr.match(/([+-]\\d{2}:\\d{2})$/);
+    return m ? m[1] : null;
+  }
+
+  function fmtDateInTz(dateStr, tzOffset) {
+    var d = new Date(dateStr);
+    var m = tzOffset.match(/([+-])(\\d{2}):(\\d{2})/);
+    if (!m) return fmtDate(dateStr);
+    var sign = m[1] === '+' ? 1 : -1;
+    var offsetMs = sign * (parseInt(m[2]) * 3600 + parseInt(m[3]) * 60) * 1000;
+    var shifted = new Date(d.getTime() + offsetMs);
+    var pad = function(n) { return String(n).padStart(2, '0'); };
+    return shifted.getUTCFullYear() + '-' + pad(shifted.getUTCMonth()+1) + '-' + pad(shifted.getUTCDate())
+         + ' ' + pad(shifted.getUTCHours()) + ':' + pad(shifted.getUTCMinutes());
   }
 
   function authorTooltip(hash, email) {
@@ -167,7 +188,8 @@
       for (const a of articles) {
         const link = a.slug || a.uniqueid;
         html += '<tr>';
-        html += '<td class="article-date" title="' + esc(fmtDate(a.date)) + '"><time datetime="' + datetimeISO(a.date) + '" data-format="date">' + fmtDateShort(a.date) + '</time></td>';
+        var tz = getTzOffset(a.date) || '';
+        html += '<td class="article-date"><time datetime="' + datetimeISO(a.date) + '" data-orig="' + esc(a.date) + '" data-tz="' + esc(tz) + '">' + fmtDateShort(a.date) + '</time></td>';
         html += '<td class="article-info">';
         html += '<a href="/' + esc(link) + '" class="article-link">' + esc(a.subject) + '</a>';
         html += '<span class="article-meta">';
@@ -182,6 +204,7 @@
     }
     document.getElementById('app').innerHTML = html;
     initCopyLinks();
+    initTimeHover();
   }
 
   async function renderArticle(id) {
@@ -210,7 +233,8 @@
     html += '<h2 class="article-subject">' + esc(article.subject) + '</h2>';
     html += '<div class="article-meta-bar">';
     html += '<span class="author" title="' + esc(authorTooltip(article.author_hash, article.author_email)) + '">' + esc(article.author) + '</span>';
-    html += '<time class="date" datetime="' + datetimeISO(article.date) + '" title="' + esc(fmtDate(article.date)) + '">' + fmtDate(article.date) + '</time>';
+    var tz = getTzOffset(article.date) || '';
+    html += '<time class="date" datetime="' + datetimeISO(article.date) + '" data-orig="' + esc(article.date) + '" data-tz="' + esc(tz) + '">' + fmtDate(article.date) + '</time>';
     html += '<a href="/' + esc(baseSlug) + '" class="uid" title="permalink" data-address="/' + esc(baseSlug) + '">#' + esc(article.uniqueid) + '</a>';
     html += '</div>';
     html += '<div class="article-body">' + renderMD(article.body) + '</div>';
@@ -258,6 +282,7 @@
     initCopyLinks();
     initReplyTargetLinks();
     highlightHash();
+    initTimeHover();
   }
 
   function renderComments(comments, article) {
@@ -293,7 +318,8 @@
     let html = '<div id="c-' + c.uniqueid + '" class="' + cls + '">';
     html += '<div class="comment-header">';
     html += '<span class="author" title="' + esc(authorTooltip(c.author_hash, c.author_email)) + '">' + esc(c.author) + '</span>';
-    html += '<time class="date" datetime="' + datetimeISO(c.date) + '" title="' + esc(fmtDate(c.date)) + '">' + fmtDate(c.date) + '</time>';
+    var ctz = getTzOffset(c.date) || '';
+    html += '<time class="date" datetime="' + datetimeISO(c.date) + '" data-orig="' + esc(c.date) + '" data-tz="' + esc(ctz) + '">' + fmtDate(c.date) + '</time>';
     html += ' <a href="/' + esc(baseSlug) + '#c-' + c.uniqueid + '" class="uid" title="permalink" data-address="/' + esc(baseSlug) + '#c-' + c.uniqueid + '">#' + esc(c.uniqueid) + '</a>';
     if (!c.deleted) {
       const mailtoLink = makeMailto(c.uniqueid, article.subject, article.email_local, article.email_domain, c.body, c.author, fmtDate(c.date), true);
@@ -315,7 +341,8 @@
     if (c.edits && c.edits.length) {
       html += '<details class="comment-edits"><summary>' + t('edit_history') + ' (' + c.edits.length + ')</summary>';
       c.edits.forEach(function(e) {
-        html += '<div class="edit-entry"><time>' + fmtDate(e.date) + '</time>';
+        var etz = getTzOffset(e.date) || '';
+        html += '<div class="edit-entry"><time data-orig="' + esc(e.date) + '" data-tz="' + esc(etz) + '">' + fmtDate(e.date) + '</time>';
         html += '<div class="edit-body">' + esc(e.body).replace(/\n/g, '<br>') + '</div></div>';
       });
       html += '</details>';
@@ -355,6 +382,20 @@
           target.scrollIntoView({behavior: 'smooth', block: 'center'});
         }
       });
+    });
+  }
+
+  function initTimeHover() {
+    document.querySelectorAll('time[data-tz]').forEach(function(el) {
+      var origDatetime = el.getAttribute('data-orig');
+      var tz = el.getAttribute('data-tz');
+      if (!tz || !origDatetime) return;
+      var localText = el.textContent;
+      var publisherText = fmtDateInTz(origDatetime, tz);
+      if (localText === publisherText) return;
+      el.style.cursor = 'help';
+      el.addEventListener('mouseenter', function() { el.textContent = publisherText; });
+      el.addEventListener('mouseleave', function() { el.textContent = localText; });
     });
   }
 
