@@ -48,7 +48,7 @@ Theme metadata, loaded by `app.js` at startup.
   "title": "My Blog",
   "subtitle": "Email-to-blog",
   "description": "Send an email, it becomes a post.",
-  "footer_html": "<p>Powered by MailBlogger</p>"
+  "footer_html": ""
 }
 ```
 
@@ -96,7 +96,7 @@ Use `{{variable}}` syntax for interpolation. Theme code accesses strings via `t(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Loading...</title>
+  <title></title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>

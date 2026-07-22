@@ -101,7 +101,7 @@ Read-only JSON API endpoints:
 ## Testing
 
 ```bash
-go test ./...                     # run all unit tests (109)
+go test ./...                     # run all unit tests (112)
 go test ./blog/...                # blog package tests
 go test ./email/...               # email package tests
 go test ./web/...                 # web package tests (includes API tests)

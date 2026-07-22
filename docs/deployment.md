@@ -9,11 +9,11 @@ go build -o mailblogger .
 
 ## Docker
 
-Multi-stage build: `golang:1.26-alpine` (compile) → `alpine:3.21` (runtime with `libwebp`).
+Multi-stage build: `golang:1.26-alpine` (compile with `gcc`/`musl-dev` for CGo) → `alpine:3.21` (runtime with `libwebp`).
 
 ```bash
 docker build -t mailblogger .
-docker run -p 8080:8080 -v ./config.yaml:/app/config.yaml -v ./content:/app/content mailblogger
+docker run -p 8080:8080 -v ./config.yaml:/app/config.yaml -v ./content:/app/content -v ./themes:/app/themes mailblogger
 ```
 
 ### docker-compose.yml
@@ -27,8 +27,20 @@ services:
     volumes:
       - ./content:/app/content
       - ./config.yaml:/app/config.yaml:ro
+      - ./themes:/app/themes
     restart: unless-stopped
 ```
+
+### Entrypoint & Theme Volume
+
+The container uses `/entrypoint.sh` which syncs the baked-in default theme (`/app/default-theme/default/`) into the themes volume (`/app/themes/default/`) on every start:
+
+- First run: populates `themes/default/` from the image
+- Image upgrade: new/modified files are copied (via `cp -ru`)
+- `theme.json`: **never overwritten** after first run — your customizations are preserved
+- Custom themes in other directories are untouched
+
+To override the default theme, edit files directly in `./themes/default/`.
 
 ## Production Notes
 
