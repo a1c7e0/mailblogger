@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"log"
 	"net/mail"
+	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -359,11 +361,45 @@ func sanitize(s string) string {
 }
 
 // replaceCIDInBody replaces all CID image references in the body with image numbers.
-// Handles both markdown image syntax ![...](cid:xxx) and bare cid:xxx references.
+// Handles markdown image syntax ![...](cid:xxx) and bare cid:xxx references.
 func replaceCIDInBody(body string, cidMap map[string]string) string {
 	for cid, num := range cidMap {
-		body = strings.ReplaceAll(body, "![image](cid:"+cid+")", num)
+		// Replace markdown image syntax: ![alt](cid:xxx) -> ![alt](num)
+		body = strings.ReplaceAll(body, "](cid:"+cid+")", "]("+num+")")
+		// Replace bare cid:xxx references
 		body = strings.ReplaceAll(body, "cid:"+cid, num)
+	}
+	return body
+}
+
+// resolveImageNumbers replaces simple numeric image references (e.g. ![alt](1))
+// with full filenames including extension (e.g. ![alt](1.webp)).
+// It scans the article directory for files matching the number prefix.
+func resolveImageNumbers(body, articleDir string) string {
+	entries, err := os.ReadDir(articleDir)
+	if err != nil {
+		return body
+	}
+	// Build map: number -> full filename
+	numMap := make(map[string]string)
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		// Match files like "1.webp", "2.png", "c_abc123_1.webp"
+		// For article images: extract number before extension
+		if idx := strings.Index(name, "."); idx > 0 {
+			num := name[:idx]
+			if _, err := strconv.Atoi(num); err == nil {
+				numMap[num] = name
+			}
+		}
+	}
+	// Replace numeric references in markdown image syntax
+	for num, filename := range numMap {
+		// Replace ![...](num) -> ![...](filename)
+		body = strings.ReplaceAll(body, "]("+num+")", "]("+filename+")")
 	}
 	return body
 }

@@ -9,6 +9,7 @@ Used for reply notifications and error replies only. Articles/comments arrive vi
 - Implicit TLS on port 465 (`crypto/tls` + `net/smtp`)
 - PLAIN authentication
 - `NewSMTPSender(server, port, username, password)`
+- `NewSenderFromConfig(smtpCfg)` — factory that returns no-op sender when SMTP not configured
 - `Send(from, to, rawEmailData)` — single-message send
 
 ## Notification Email Format
@@ -30,7 +31,7 @@ In reply to <parent_author> (#<parent_uid>):
 Reply to this email to respond directly.
 ```
 
-Thread context: up to 5 ancestors, 6000 char limit. Each labeled `Name (#uniqueid)`.
+Thread context: up to 4 ancestors (configurable), 6000 char limit. Each labeled `Name (#uniqueid)`.
 
 `Reply-To` is the key: recipient's "Reply" routes to `<mailbox>+<new_comment_uid>@domain`.
 

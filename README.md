@@ -74,7 +74,7 @@ Same for comments: send `edit` or `delete` to `blog+<comment_id>@domain`.
 Declare options at the beginning of the email body:
 
 ```
----config
+---
 banner: 2
 slug: my-post
 notify: on
@@ -90,6 +90,10 @@ Article body starts here.
 | `slug` | Custom URL slug (lowercase, digits, dashes) |
 | `title` | Override article title |
 | `notify` | `on`/`true` → watch; `off`/`false` → mute |
+
+## Image References
+
+Reference images by number in markdown: `![alt](1)` → saved as `![alt](1.webp)`.
 
 ## Notification
 
@@ -153,16 +157,12 @@ site:
   lang: en
   show_author: true
   width: 600
-  # auto_lang: false       # detect browser language for per-language themes
-  # links:                 # navigation links in header
-  #   - title: "About"
-  #     url: "/about"
 
 web:
   port: 8080
   scheme: https
 
-theme: default              # or per-language map (see Themes section)
+theme: default
 
 privacy:
   hide_email: true

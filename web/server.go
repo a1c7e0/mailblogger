@@ -8,7 +8,6 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -28,13 +27,6 @@ type Server struct {
 	Scheme      string
 	EmailLocal  string
 	EmailDomain string
-	HideEmail   bool
-	Site        config.SiteConfig
-	Port        int
-	Addr        string
-	Theme       string
-	ThemeCfg    config.ThemeConfig
-	AutoLang    bool
 	tmpl        *template.Template
 	configGetter func() *config.Config
 	avatarFile  string
@@ -49,10 +41,7 @@ type ServerConfig struct {
 	Scheme      string
 	EmailLocal  string
 	EmailDomain string
-	HideEmail   bool
 	Site        config.SiteConfig
-	ListenHost  string
-	Port        int
 	Theme       config.ThemeConfig
 }
 
@@ -62,20 +51,16 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		"renderPlaintext": renderPlaintext,
 		"mailto":    makeMailto,
 		"rawHTML":   func(s string) template.HTML { return template.HTML(s) },
-		"add":       func(a, b int) int { return a + b },
-		"sub":       func(a, b int) int { return a - b },
 		"fmtDate":      fmtDate,
 		"fmtDateTitle": fmtDateTitle,
 		"datetimeISO":  datetimeISO,
-		"truncate":  truncate,
 		"excerpt":  excerpt,
-		"urlencode": url.QueryEscape,
 		"commentImages": func(articleID, commentUID string) []string {
 			imgs, _ := cfg.Store.ListCommentImages(articleID, commentUID)
 			return imgs
 		},
 		"authorTooltip": func(authorHash, authorEmail string) string {
-			return authorTooltipFn(cfg.Store, cfg.HideEmail, authorHash, authorEmail)
+			return authorTooltipFn(cfg.Store, cfg.Site.ShowAuthor, authorHash, authorEmail)
 		},
 	}
 
@@ -90,17 +75,25 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		Scheme:      cfg.Scheme,
 		EmailLocal:  cfg.EmailLocal,
 		EmailDomain: cfg.EmailDomain,
-		HideEmail:   cfg.HideEmail,
-		Site:        cfg.Site,
-		Port:        cfg.Port,
-		Addr:        cfg.ListenHost,
-		Theme:       cfg.Theme.Theme,
-		ThemeCfg:    cfg.Theme,
-		AutoLang:    cfg.Site.AutoLang,
 		tmpl:        tmpl,
 	}
 	srv.detectAssets()
 	return srv, nil
+}
+
+func (s *Server) getConfig() *config.Config {
+	if s.configGetter != nil {
+		return s.configGetter()
+	}
+	return &config.Config{}
+}
+
+func (s *Server) getSite() config.SiteConfig {
+	return s.getConfig().Site
+}
+
+func (s *Server) getTheme() config.ThemeConfig {
+	return s.getConfig().Theme
 }
 
 func (s *Server) Handler() http.Handler {
@@ -130,7 +123,7 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) UpdateConfig(site config.SiteConfig) {
-	s.Site = site
+	// Site config is read from configGetter, nothing to update locally
 }
 
 func (s *Server) SetConfigGetter(fn func() *config.Config) {
@@ -139,54 +132,6 @@ func (s *Server) SetConfigGetter(fn func() *config.Config) {
 
 func (s *Server) InvalidateFeedCache() {
 	globalFeedCache.invalidate()
-}
-
-func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
-	base := filepath.Base(r.URL.Path)
-	if base == "favicon.svg" {
-		p := filepath.Join(s.Store.ContentDir, "favicon.svg")
-		if _, err := os.Stat(p); err == nil {
-			http.ServeFile(w, r, p)
-			return
-		}
-		if len(s.cachedFaviconSVG) > 0 {
-			w.Header().Set("Content-Type", "image/svg+xml")
-			w.Write(s.cachedFaviconSVG)
-			return
-		}
-		http.NotFound(w, r)
-		return
-	}
-	if base == s.avatarFile && s.avatarFile != "" {
-		http.ServeFile(w, r, filepath.Join(s.Store.ContentDir, base))
-		return
-	}
-	path := filepath.Join("static", strings.TrimPrefix(r.URL.Path, "/static/"))
-	http.ServeFile(w, r, path)
-}
-
-func (s *Server) handleFaviconICO(w http.ResponseWriter, r *http.Request) {
-	p := filepath.Join(s.Store.ContentDir, "favicon.ico")
-	if _, err := os.Stat(p); err == nil {
-		http.ServeFile(w, r, p)
-		return
-	}
-	if len(s.cachedFaviconICO) > 0 {
-		w.Header().Set("Content-Type", "image/x-icon")
-		w.Write(s.cachedFaviconICO)
-		return
-	}
-	http.NotFound(w, r)
-}
-
-func (s *Server) handleRobotsTXT(w http.ResponseWriter, r *http.Request) {
-	p := filepath.Join(s.Store.ContentDir, "robots.txt")
-	if _, err := os.Stat(p); err == nil {
-		http.ServeFile(w, r, p)
-		return
-	}
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprintf(w, "User-agent: *\nAllow: /\nSitemap: %s://%s/sitemap.xml\n", s.Scheme, s.Host)
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -214,12 +159,13 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		totalPages = 1
 	}
 
+	site := s.getSite()
 	data := map[string]interface{}{
 		"Host":        s.Host,
 		"Scheme":      s.Scheme,
 		"EmailLocal":  s.EmailLocal,
 		"EmailDomain": s.EmailDomain,
-		"Site":        s.Site,
+		"Site":        site,
 		"Articles":    articles,
 		"Page":       page,
 		"TotalPages": totalPages,
@@ -314,17 +260,20 @@ func (s *Server) handleSPA(w http.ResponseWriter, r *http.Request) {
 
 // resolveTheme determines which theme to use based on Accept-Language and config
 func (s *Server) resolveTheme(r *http.Request) string {
+	themeCfg := s.getTheme()
+	site := s.getSite()
+
 	// If per-language themes are configured and auto_lang is enabled
-	if s.AutoLang && len(s.ThemeCfg.Themes) > 0 {
+	if site.AutoLang && len(themeCfg.Themes) > 0 {
 		lang := parseAcceptLanguage(r.Header.Get("Accept-Language"))
 		if lang != "" {
-			if theme, ok := s.ThemeCfg.Themes[lang]; ok {
+			if theme, ok := themeCfg.Themes[lang]; ok {
 				return theme
 			}
 		}
 	}
 	// Fallback to resolved theme (single theme or first in map)
-	return s.ThemeCfg.ResolveTheme(s.Site.Lang)
+	return themeCfg.ResolveTheme(site.Lang)
 }
 
 func (s *Server) handleHistoryArticle(w http.ResponseWriter, r *http.Request, id, editDir string) {
@@ -414,12 +363,13 @@ func (s *Server) renderArticleBodyWithComments(w http.ResponseWriter, article *b
 		}
 	}
 
+	site := s.getSite()
 	data := map[string]interface{}{
 		"Host":         s.Host,
 		"Scheme":       s.Scheme,
 		"EmailLocal":   s.EmailLocal,
 		"EmailDomain":  s.EmailDomain,
-		"Site":         s.Site,
+		"Site":         site,
 		"Article":      article,
 		"Comments":     displayComments,
 		"UnreferencedImages": unreferenced,
@@ -522,7 +472,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	// GET: show form
 	prefs, _ := s.Store.GetPrefs(token.AuthorHash)
 	if prefs == nil {
-		prefs = &blog.UserPrefs{ArticleNotify: true, CommentNotify: false, HideEmail: s.HideEmail}
+		prefs = &blog.UserPrefs{ArticleNotify: true, CommentNotify: false, HideEmail: true}
 	}
 
 	articles := s.Store.ListArticlesByAuthor(token.AuthorHash)
@@ -549,8 +499,9 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   3600, // 1 hour
 	})
 
+	site := s.getSite()
 	data := map[string]interface{}{
-		"Site":        s.Site,
+		"Site":        site,
 		"Token":       tokenStr,
 		"AuthorName":  token.AuthorName,
 		"Prefs":       prefs,

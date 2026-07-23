@@ -3,7 +3,7 @@
 ## Unit Tests
 
 ```bash
-go test ./...                     # all tests (109)
+go test ./...                     # all tests (112)
 go test ./blog/...                # blog: frontmatter, comments, uniqueID, store, SQLite
 go test ./email/...               # email: cleanSubject, matchPattern, parseNotifyTag, htmlToMarkdown, DKIM, ParseRawEmail
 go test ./web/...                 # web: API endpoints (httptest), buildRawMessage
@@ -66,8 +66,10 @@ cd tools && go build -o sendmail sendmail.go
 - Author hash consistent for same email across articles/comments
 - `delete` subject removes article (or marks comment deleted)
 - `edit` subject replaces body, archives old version
-- Email quotes stripped (`On ... wrote:`, `>` lines)
+- Email quotes stripped (`On ... wrote:`, `> ---` reply template); **user-authored `>` quotes are preserved**
 - Notification 3-tier: per-article override > per-user pref > global default
 - Same-author replies don't trigger notification
 - Feed cache: 5min TTL, invalidated on article changes
 - All config fields hot-reloadable
+- Image refs: `![1]` in markdown → `![1](1.webp)` at save time
+- SMTP sender constructed via `NewSenderFromConfig` factory

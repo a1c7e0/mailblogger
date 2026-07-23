@@ -1,8 +1,6 @@
 # Unique IDs & Author Hashing
 
-## File: `blog/uniqueid.go`
-
-## Hash Function
+## Hash Function (`blog/uniqueid.go`)
 
 ```go
 func hashID(input string) string {

@@ -153,12 +153,13 @@ func (s *Server) handleAPISite(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	site := s.getSite()
 	resp := map[string]interface{}{
-		"lang":         s.Site.Lang,
-		"show_author":  s.Site.ShowAuthor,
-		"avatar":       s.Site.Avatar,
-		"width":        s.Site.Width,
-		"links":        s.Site.Links,
+		"lang":         site.Lang,
+		"show_author":  site.ShowAuthor,
+		"avatar":       site.Avatar,
+		"width":        site.Width,
+		"links":        site.Links,
 		"email_local":  s.EmailLocal,
 		"email_domain": s.EmailDomain,
 	}
@@ -327,7 +328,7 @@ func (s *Server) handleAPILocale(w http.ResponseWriter, r *http.Request) {
 	}
 	lang := r.URL.Query().Get("lang")
 	if lang == "" {
-		lang = s.Site.Lang
+		lang = s.getSite().Lang
 	}
 	theme := s.resolveTheme(r)
 	if theme == "" {
@@ -447,11 +448,8 @@ func (s *Server) buildRawMessage(from, to, subject, body, htmlBody string, image
 }
 
 func (s *Server) newProcessor() *email.Processor {
-	cfg := s.configGetter()
-	sender := &email.SMTPSender{}
-	if cfg.Mail.SMTP.Server != "" && cfg.Mail.SMTP.Password != "" {
-		sender = email.NewSMTPSender(cfg.Mail.SMTP.Server, cfg.Mail.SMTP.Port, cfg.Mail.SMTP.Username, cfg.Mail.SMTP.Password)
-	}
+	cfg := s.getConfig()
+	sender := email.NewSenderFromConfig(cfg.Mail.SMTP)
 	return email.NewProcessor(s.Store, s.EmailLocal, s.EmailDomain, s.Host, s.Scheme, nil, sender, cfg.Mail.DKIM)
 }
 

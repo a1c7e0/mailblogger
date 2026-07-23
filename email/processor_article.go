@@ -94,6 +94,10 @@ func (p *Processor) processArticle(raw *RawMessage) error {
 		}
 	}
 
+	// Resolve numeric image references to full filenames
+	body = resolveImageNumbers(body, articleDir)
+	article.Body = body
+
 	if err := p.Store.SaveArticle(article); err != nil {
 		return fmt.Errorf("save article: %w", err)
 	}
@@ -173,7 +177,10 @@ func (p *Processor) handleEditCommand(raw *RawMessage, article *blog.Article) er
 		}
 	}
 
+	// Resolve numeric image references to full filenames
+	body = resolveImageNumbers(body, articleDir)
 	article.Body = body
+
 	if err := p.Store.SaveArticle(article); err != nil {
 		log.Printf("edit article %s failed: %v", article.UniqueID, err)
 		return err

@@ -217,6 +217,14 @@ func datetimeISO(d interface{}) string {
 	return t.UTC().Format("2006-01-02T15:04:05Z")
 }
 
+var mdStripRe = regexp.MustCompile(`[#*\[\]!()>|_~` + "`" + `]`)
+
+func excerpt(input string, maxLen int) string {
+	s := mdStripRe.ReplaceAllString(input, "")
+	s = strings.Join(strings.Fields(s), " ")
+	return truncate(s, maxLen)
+}
+
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
@@ -224,12 +232,27 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
-var mdStripRe = regexp.MustCompile(`[#*\[\]!()>|_~` + "`" + `]`)
+func xmlEscape(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, "\"", "&quot;")
+	s = strings.ReplaceAll(s, "'", "&apos;")
+	return s
+}
 
-func excerpt(input string, maxLen int) string {
-	s := mdStripRe.ReplaceAllString(input, "")
-	s = strings.Join(strings.Fields(s), " ")
-	return truncate(s, maxLen)
+var feedImgRe = regexp.MustCompile(`<img src="([^"]+)"`)
+
+func rewriteFeedImages(html, articleID, scheme, host string) string {
+	return feedImgRe.ReplaceAllStringFunc(html, func(match string) string {
+		idx := strings.Index(match, `src="`)
+		src := match[idx+5:]
+		src = src[:strings.Index(src, `"`)]
+		if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") || strings.HasPrefix(src, "/") {
+			return match
+		}
+		return fmt.Sprintf(`<img src="%s://%s/%s/%s"`, scheme, host, articleID, src)
+	})
 }
 
 func authorTooltipFn(store *blog.Store, globalHideEmail bool, authorHash, authorEmail string) string {

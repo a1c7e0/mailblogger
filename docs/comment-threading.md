@@ -5,6 +5,7 @@
 Comments stored in `comments.json` (JSON array) per article. `reply_to` field points to target comment's `uniqueid`; empty = top-level reply to article.
 
 Visual depth capped at 1:
+
 ```
 comment1              ← depth 0
   comment2            ← depth 1 (reply to comment1)
@@ -15,6 +16,7 @@ comment4              ← depth 0
 ## Rendering Order
 
 `renderArticleBodyWithComments()` groups comments so replies follow their parent:
+
 1. Collect top-level comments (`reply_to` empty or = article ID)
 2. For each top-level, append its replies immediately after
 3. Replies at depth 1 grouped by `reply_to` lookup

@@ -13,7 +13,7 @@ mailblogger/
 │   └── store_sql.go             # SQLite metadata (tokens, user prefs, watchers/muters)
 ├── email/
 │   ├── imap.go                  # IMAP client, MIME parsing, parseBodyParts, htmlToMarkdown
-│   ├── smtp.go                  # SMTP sender (implicit TLS, port 465)
+│   ├── smtp.go                  # SMTP sender (implicit TLS, port 465), NewSenderFromConfig factory
 │   ├── processor.go             # Processor struct, ProcessMessage dispatch, config parsing
 │   ├── processor_article.go     # Article create/edit/delete lifecycle
 │   ├── processor_comment.go     # Comment create/edit/delete lifecycle
@@ -22,13 +22,11 @@ mailblogger/
 │   ├── images.go                # Image extraction, WebP conversion, CID replacement
 │   └── dkim.go                  # DKIM signature verification via DNS
 ├── web/
-│   ├── server.go                # HTTP routing, handlers, SPA, settings page
+│   ├── server.go                # HTTP routing, handlers, SPA, settings page (5 fields, 6 template funcs)
+│   ├── static.go                # Static files, assets, feed, sitemap, robots.txt
 │   ├── render.go                # Markdown→HTML, image/code-block wrapping, date formatting, mailto links
-│   ├── assets.go                # Favicon/avatar detection, ICO generation
 │   ├── api.go                   # REST API: POST article/comment, GET site/articles/status, raw-email webhook
-│   ├── feed.go                  # Atom feed generation with 5min cache
-│   ├── sitemap.go               # XML sitemap generation
-│   └── templates/               # go:embed HTML templates
+│   └── templates/               # go:embed HTML templates (index.html, article.html, settings.html)
 ├── static/                      # CSS and JS (spa.js for client-side navigation)
 ├── themes/                      # Custom theme directory (SPA entry points)
 ├── tools/sendmail.go            # SMTP test tool
@@ -50,7 +48,7 @@ Email → IMAP poll (30s) or webhook (/api/raw-email)
       → Whitelist check → fail → SaveDraft() + draft reply
       → parseBodyConfig() → extract banner/slug/notify/title
       → Extract images → saveArticleImages() → CID replacement
-      → SaveArticle()
+      → resolveImageNumbers() → SaveArticle()
     → Has uniqueid → processComment()
       → Target article? → check [EDIT]/[DELETE] or new comment
       → Target comment? → reply comment + notifyReply()
@@ -66,3 +64,14 @@ Email → IMAP poll (30s) or webhook (/api/raw-email)
 - **sync.Once cache**: article list, hash maps, slug maps built once, invalidated on writes
 - **Implicit TLS SMTP**: port 465, no STARTTLS
 - **IMAP polling**: 30s interval, short-lived connections, exponential backoff (1s → 2min)
+- **Three web files**: `server.go` (SSR/SPA), `static.go` (assets/feed/sitemap), `render.go` (content rendering)
+- **Sender factory**: `NewSenderFromConfig` eliminates duplicate SMTP construction
+
+## Module Interface Summary
+
+| Module | Interface | Depth |
+|--------|-----------|-------|
+| `blog.Store` | `SaveArticle`, `GetArticle`, `ListArticles`, `SaveComment`, `GetComments`, `AddWatcher/Muter`, `ShouldNotify` | Deep: 30+ methods behind small public interface |
+| `email.Processor` | `ProcessMessage` | Deep: full email lifecycle behind one method |
+| `web.Server` | `Handler()`, `SetConfigGetter`, `InvalidateFeedCache` | Deep: HTTP routing, rendering, API behind small interface |
+| `email.Poller` | `Start()` | Shallow: single method, encapsulates polling loop |

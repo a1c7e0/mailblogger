@@ -4,6 +4,8 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/smtp"
+
+	"mailblogger/config"
 )
 
 type SMTPSender struct {
@@ -20,6 +22,15 @@ func NewSMTPSender(server string, port int, username, password string) *SMTPSend
 		Username: username,
 		Password: password,
 	}
+}
+
+// NewSenderFromConfig creates an SMTPSender from SMTP config, or returns
+// a no-op sender if SMTP is not configured.
+func NewSenderFromConfig(smtpCfg config.SMTPConfig) *SMTPSender {
+	if smtpCfg.Server != "" && smtpCfg.Password != "" {
+		return NewSMTPSender(smtpCfg.Server, smtpCfg.Port, smtpCfg.Username, smtpCfg.Password)
+	}
+	return &SMTPSender{}
 }
 
 func (s *SMTPSender) Send(from, to, data string) error {

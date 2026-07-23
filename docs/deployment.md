@@ -61,3 +61,10 @@ To override the default theme, edit files directly in `./themes/default/`.
 ## Signals
 
 `SIGINT` / `SIGTERM` → graceful shutdown (10s timeout): HTTP drains, Poller stops, config watcher stops.
+
+## Architecture Changes (v2025-07)
+
+- Web package consolidated to 3 files: `server.go` (SSR/SPA), `static.go` (assets/feed/sitemap), `render.go` (content rendering)
+- SMTP sender factory: `NewSenderFromConfig` eliminates duplicate construction
+- Image references: numeric `![1]` in markdown, resolved to `1.webp` at save time
+- Quote stripping: preserves user-authored `>` quotes, only removes reply template

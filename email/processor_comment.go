@@ -75,6 +75,12 @@ func (p *Processor) processComment(raw *RawMessage, targetID string) error {
 		}
 	}
 
+	// Resolve numeric image references to full filenames
+	articleDir, _ := p.Store.GetArticleDir(parentID)
+	if articleDir != "" {
+		comment.Body = resolveImageNumbers(comment.Body, articleDir)
+	}
+
 	if err := p.Store.SaveComment(comment); err != nil {
 		return fmt.Errorf("save comment: %w", err)
 	}

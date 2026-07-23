@@ -45,7 +45,7 @@ blog/
   store_sql.go      → SQLite metadata (tokens, user prefs, watchers/muters)
 email/
   imap.go           → IMAP client, MIME parsing, parseBodyParts, htmlToMarkdown
-  smtp.go           → SMTP sender (implicit TLS, port 465)
+  smtp.go           → SMTP sender (implicit TLS, port 465), NewSenderFromConfig factory
   processor.go      → Processor struct, ProcessMessage dispatch, config parsing
   processor_article.go → Article create/edit/delete lifecycle
   processor_comment.go → Comment create/edit/delete lifecycle
@@ -54,12 +54,11 @@ email/
   images.go         → Image extraction, WebP conversion, CID replacement
   dkim.go           → DKIM signature verification via DNS
 web/
-  server.go         → HTTP routing, handlers, SPA, settings page
+  server.go         → HTTP routing, handlers, SPA, settings page (5 fields, 8 template funcs)
+  static.go         → Static files, assets, feed, sitemap, robots.txt
   render.go         → Markdown→HTML, image/code-block wrapping, date formatting, mailto links
-  assets.go         → Favicon/avatar detection, ICO generation
   api.go            → REST API: POST article/comment, GET site/articles/status, raw-email webhook
-  feed.go           → Atom feed generation with 5min cache
-  sitemap.go        → XML sitemap generation
+  templates/        → go:embed HTML templates (index.html, article.html, settings.html)
 static/             → CSS and JS (spa.js for client-side navigation)
 themes/             → Custom theme directory (SPA entry points)
 tools/sendmail.go   → SMTP test tool for development
@@ -97,6 +96,16 @@ Read-only JSON API endpoints:
 - `GET /api/article/{id}` — article detail (by hash or slug)
 - `GET /api/article/{id}/comments` — article comments
 - `GET /api/status` — server status
+
+## Key Architecture Changes (v2025-07)
+
+1. **Web package consolidated to 4 files**: `server.go` (SSR/SPA), `static.go` (assets/feed/sitemap), `render.go` (content rendering), `api.go` (REST API). Removed: `assets.go`, `feed.go`, `sitemap.go`.
+2. **SMTP sender factory**: `NewSenderFromConfig` eliminates duplicate sender construction in 3 call sites.
+3. **Quote stripping fixed**: `stripEmailQuotes()` preserves user-authored `>` quotes, only removes reply template (`> ---` + "Write your reply above this line").
+4. **Image refs resolved at save**: numeric `![1]` in markdown → `![1](1.webp)` in saved `index.md`; removed no-extension lookup at serve time.
+5. **ContentRenderer unified**: `xmlEscape`, `rewriteFeedImages` moved from `static.go` to `render.go`; single goldmark instance.
+6. **Server struct slimmed to 5 fields**: `Store`, `Host`, `Scheme`, `EmailLocal`, `EmailDomain` (config via `configGetter`).
+7. **Template funcs reduced from 15 to 8**: `renderMD`, `renderPlaintext`, `mailto`, `fmtDate`, `fmtDateTitle`, `datetimeISO`, `excerpt`, `commentImages`, `authorTooltip`, `rawHTML`.
 
 ## Testing
 

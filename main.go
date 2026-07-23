@@ -75,10 +75,7 @@ func runFetch(cfg *config.Config, store *blog.Store) {
 		Password: cfg.Mail.IMAP.Password,
 	}
 
-	sender := &email.SMTPSender{}
-	if cfg.Mail.SMTP.Server != "" && cfg.Mail.SMTP.Password != "" {
-		sender = email.NewSMTPSender(cfg.Mail.SMTP.Server, cfg.Mail.SMTP.Port, cfg.Mail.SMTP.Username, cfg.Mail.SMTP.Password)
-	}
+	sender := email.NewSenderFromConfig(cfg.Mail.SMTP)
 
 	processor := email.NewProcessor(store, cfg.EmailLocal, cfg.EmailDomain, cfg.Host, cfg.Web.Scheme, cfg.Mail.Whitelist, sender, cfg.Mail.DKIM)
 
@@ -94,10 +91,7 @@ func runServe(cfg *config.Config, store *blog.Store, configPath string) {
 		Scheme:      cfg.Web.Scheme,
 		EmailLocal:  cfg.EmailLocal,
 		EmailDomain: cfg.EmailDomain,
-		HideEmail:   cfg.Privacy.HideEmail,
 		Site:        cfg.Site,
-		ListenHost:  cfg.Web.Host,
-		Port:        cfg.Web.Port,
 		Theme:       cfg.Theme,
 	})
 	if err != nil {
@@ -111,11 +105,6 @@ func runServe(cfg *config.Config, store *blog.Store, configPath string) {
 	srv.SetConfigGetter(func() *config.Config {
 		return currentConfig.Load()
 	})
-
-	sender := &email.SMTPSender{}
-	if cfg.Mail.SMTP.Server != "" && cfg.Mail.SMTP.Password != "" {
-		sender = email.NewSMTPSender(cfg.Mail.SMTP.Server, cfg.Mail.SMTP.Port, cfg.Mail.SMTP.Username, cfg.Mail.SMTP.Password)
-	}
 
 	addr := fmt.Sprintf("%s:%d", cfg.Web.Host, cfg.Web.Port)
 	httpSrv := &http.Server{
@@ -139,7 +128,7 @@ func runServe(cfg *config.Config, store *blog.Store, configPath string) {
 
 	done := make(chan struct{})
 	if cfg.Mail.IMAP.Server != "" {
-		poller := email.NewPoller(store, func() *config.Config { return currentConfig.Load() }, sender, done)
+		poller := email.NewPoller(store, func() *config.Config { return currentConfig.Load() }, done)
 		go poller.Start()
 		log.Println("IMAP poller started")
 	} else {

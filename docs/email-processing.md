@@ -3,8 +3,8 @@
 ## IMAP Client (`email/imap.go`)
 
 - `ConnectIMAP(cfg)` → TLS connection on port 993
-- `FetchUnseen(c)` → search without `\\Seen` flag, fetch with `BODY.PEEK[]`
-- `DeleteEmails(c, seqNums)` → mark `\\Deleted` + EXPUNGE
+- `FetchUnseen(c)` → search without `\Seen` flag, fetch with `BODY.PEEK[]`
+- `DeleteEmails(c, seqNums)` → mark `\Deleted` + EXPUNGE
 
 ### Body Extraction
 
@@ -16,8 +16,9 @@
 Both `ParseRawEmail()` (webhook) and `parseMessage()` (IMAP) call `parseBodyParts()`.
 
 ### Body Cleaning
-- `cleanBody()`: trim, normalize `\\r\\n` → `\\n`, strip email quotes
-- `stripEmailQuotes()`: truncates at first `On ... wrote:`, `>` prefix, or `---` line
+
+- `cleanBody()`: trim, normalize `\r\n` → `\n`, strip email quotes
+- `stripEmailQuotes()`: truncates at first `On ... wrote:`, `> ---` followed by "Write your reply above this line", or `---` line. **User-authored `>` quotes in the body are preserved.**
 
 ## IMAP Poller (`email/poller.go`)
 
@@ -33,6 +34,7 @@ Exponential backoff on failure: 1s → 2s → 4s ... max 2min, reset on success.
 ## Processor (`email/processor.go` + `processor_*.go`)
 
 ### Dispatch (`ProcessMessage`)
+
 ```
 DKIM check → fail → sendErrorReply()
 Settings command? → handleSettingsCommand() → token + email link
@@ -43,29 +45,35 @@ parseTargetID(To):
 ```
 
 ### Article Lifecycle (`processor_article.go`)
-- `processArticle()`: whitelist → draft or publish; parseBodyConfig for slug/banner/notify/title; save images + CID replacement
+
+- `processArticle()`: whitelist → draft or publish; parseBodyConfig for slug/banner/notify/title; save images + CID replacement; resolve numeric image refs to full filenames
 - `handleEditCommand()`: archive version, replace body/images, update config fields
 - `handleDeleteCommand()`: archive to `_deleted/` or permanent delete
 
 ### Comment Lifecycle (`processor_comment.go`)
+
 - `processComment()`: match article or comment target; [WATCH]/[MUTE] tags; save comment + images
 - `handleEditCommentCommand()` / `handleDeleteCommentCommand()`: update/mark-deleted in `comments.json`
 
 ### Notification (`processor_notify.go`)
+
 - `notifyReply()`: 3-tier priority check → send plain-text email with thread context
 - `collectAncestors()`: walk reply chain up to 4 ancestors, 6000 char limit
 - `sendErrorReply()` / `sendDraftReply()`: automated responses
 
 ### Shared Utilities (`processor.go`)
+
 - `parseBodyConfig()`: extract `---` delimited key-value block from email body
 - `cleanSubject()`: strip Re:/Fwd: prefixes iteratively
 - `parseNotifyTag()`: extract [WATCH]/[MUTE] from subject
 - `buildEmailMessage()`: construct RFC 2822 plain-text email
 - `matchPattern()`: whitelist matching (`*`, exact, `*@domain`)
+- `NewSenderFromConfig()`: factory for SMTP sender (eliminates duplicate construction)
 
 ## Body Configuration
 
 Articles can declare config at the beginning of the body:
+
 ```
 ---
 banner: 2
@@ -95,6 +103,11 @@ No DKIM header → pass through. Verification fails → reject.
 - `saveCommentImages()`: prefix `c_<commentUID>_<N>.<ext>`
 
 Conversion occurs when a message is received or an article is edited. Existing image files are not retroactively rewritten.
+
+### CID Replacement & Numeric Resolution
+
+1. `replaceCIDInBody()`: converts `![alt](cid:xxx)` → `![alt](1)` and bare `cid:xxx` → `1`
+2. `resolveImageNumbers()`: scans article directory, maps `1` → `1.webp` in markdown before saving
 
 ## RawMessage Struct
 

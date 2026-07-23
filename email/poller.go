@@ -48,16 +48,14 @@ func FetchOnce(imapCfg Config, processor *Processor) error {
 type Poller struct {
 	Store        *blog.Store
 	ConfigGetter func() *config.Config
-	Sender       *SMTPSender
 	Done         <-chan struct{}
 }
 
 // NewPoller creates a new IMAP poller.
-func NewPoller(store *blog.Store, configGetter func() *config.Config, sender *SMTPSender, done <-chan struct{}) *Poller {
+func NewPoller(store *blog.Store, configGetter func() *config.Config, done <-chan struct{}) *Poller {
 	return &Poller{
 		Store:        store,
 		ConfigGetter: configGetter,
-		Sender:       sender,
 		Done:         done,
 	}
 }
@@ -76,7 +74,8 @@ func (p *Poller) Start() {
 		}
 
 		cfg := p.ConfigGetter()
-		processor := NewProcessor(p.Store, cfg.EmailLocal, cfg.EmailDomain, cfg.Host, cfg.Web.Scheme, cfg.Mail.Whitelist, p.Sender, cfg.Mail.DKIM)
+		sender := NewSenderFromConfig(cfg.Mail.SMTP)
+		processor := NewProcessor(p.Store, cfg.EmailLocal, cfg.EmailDomain, cfg.Host, cfg.Web.Scheme, cfg.Mail.Whitelist, sender, cfg.Mail.DKIM)
 
 		imapCfg := Config{
 			Server:   cfg.Mail.IMAP.Server,

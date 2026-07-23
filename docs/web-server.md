@@ -4,12 +4,11 @@
 
 | File | Responsibility |
 |---|---|
-| `web/server.go` | HTTP routing, handlers, SPA, settings page, template setup |
+| `web/server.go` | HTTP routing, SSR/SPA handlers, settings page, template setup (5 fields, 8 template funcs) |
+| `web/static.go` | Static files, assets (favicon/avatar), feed, sitemap, robots.txt |
 | `web/render.go` | Markdown→HTML, image/code-block wrapping, date formatting, mailto links, excerpt |
-| `web/assets.go` | Favicon/avatar detection, ICO generation, base64 encoding |
 | `web/api.go` | REST API endpoints, raw email webhook |
-| `web/feed.go` | Atom feed generation with 5min cache |
-| `web/sitemap.go` | XML sitemap generation |
+| `web/templates/` | go:embed HTML templates (index.html, article.html, settings.html) |
 
 ## Routes
 
@@ -22,6 +21,7 @@
 | `GET /api/articles` | `handleAPIArticles` | All articles JSON |
 | `GET /api/article/{id}` | `handleAPIArticleDetail` | Article detail JSON |
 | `GET /api/article/{id}/comments` | `handleAPIArticleComments` | Article comments JSON |
+| `GET /api/locale` | `handleAPILocale` | Theme locale JSON |
 | `GET /api/status` | `handleAPIStatus` | Health check |
 | `POST /api/article` | `handleAPIArticle` | Create article via JSON |
 | `POST /api/comment` | `handleAPIComment` | Create comment via JSON |
@@ -36,7 +36,7 @@
 
 ## SPA Mode
 
-When `theme` is configured, `handleSPA` serves `themes/<name>/index.html` for page routes. Article media routes (`/<article-id-or-slug>/<filename>`) are resolved before the SPA shell and are served directly. The theme's `app.js` fetches page data from the JSON API.
+When `theme` is configured, `handleSPA` serves `themes/<name>/index.html` for page routes. Article media routes (`/<article-id-or-slug>/<filename>`) are resolved before the SPA shell and served directly. The theme's `app.js` fetches page data from the JSON API.
 
 Without a theme, `handleSPA` falls back to SSR: `handleIndex` for `/`, `handleArticle` for `/<id>`.
 
@@ -51,6 +51,7 @@ Without a theme, `handleSPA` falls back to SSR: `handleIndex` for `/`, `handleAr
 | `commentImages` | List image filenames for a comment |
 | `authorTooltip` | Email+hash or hash-only based on privacy settings |
 | `rawHTML` / `add` / `sub` / `truncate` / `urlencode` | Utilities |
+| `excerpt` | Strip markdown, truncate to N chars |
 
 ## Markdown Rendering (`render.go`)
 
@@ -67,11 +68,11 @@ Without a theme, `handleSPA` falls back to SSR: `handleIndex` for `/`, `handleAr
 
 Used by both SSR rendering (`renderArticleBody`) and JSON API (`handleAPIArticleComments`).
 
-## Feed Generation (`feed.go`)
+## Feed Generation (`static.go`)
 
 - `/feed.xml`: Atom 1.0, one `<entry>` per article
 - `/feed-full.xml`: same + all comments appended with `<hr/>`
-- Relative `<img src>` rewritten to absolute URLs
+- Relative `<img src>` rewritten to absolute URLs via `rewriteFeedImages()`
 - 5-minute TTL cache, invalidated on article changes
 
 ## Settings Page (`handleSettings`)

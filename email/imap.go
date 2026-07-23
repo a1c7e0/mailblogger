@@ -358,10 +358,40 @@ func cleanBody(body string) string {
 }
 
 var quoteRe = regexp.MustCompile(`(?im)^(On\s+.+\s+wrote:|[>\|]\s|^---$)`)
-var imgTagRe = regexp.MustCompile(`<img[^>]*src="([^"]+)"[^>]*alt="([^"]*)"[^>]*>`)
 
+// stripEmailQuotes removes quoted reply content from email bodies.
+// It preserves user-authored ">" quotes in the body, only stripping
+// automatically generated reply templates and standard email quotes.
+//
+// Strategy:
+// 1. Look for the reply-template marker: "> ---" followed by "Write your reply above this line"
+// 2. If found, truncate from that marker to end of body
+// 3. Otherwise, fall back to truncating at first "On ... wrote:" or "---" line
 func stripEmailQuotes(body string) string {
 	lines := strings.Split(body, "\n")
+
+	// Look for reply-template marker: "> ---" followed by instruction line
+	for i, line := range lines {
+		if strings.HasPrefix(line, "> ---") {
+			// Check if next non-empty line is the instruction
+			for j := i + 1; j < len(lines) && j < i+3; j++ {
+				next := strings.TrimSpace(lines[j])
+				if next == "" {
+					continue
+				}
+				if strings.Contains(next, "Write your reply above this line") {
+					result := strings.TrimSpace(strings.Join(lines[:i], "\n"))
+					if result != "" {
+						return result
+					}
+					break
+				}
+				break
+			}
+		}
+	}
+
+	// Fallback: truncate at first "On ... wrote:" or standalone "---"
 	for i, line := range lines {
 		if quoteRe.MatchString(line) {
 			result := strings.TrimSpace(strings.Join(lines[:i], "\n"))
@@ -375,6 +405,7 @@ func stripEmailQuotes(body string) string {
 }
 
 var imgCIDRe = regexp.MustCompile(`(?i)<img\b[^>]*src="cid:([^"]+)"[^>]*>`)
+var imgTagRe = regexp.MustCompile(`<img[^>]*src="([^"]+)"[^>]*alt="([^"]*)"[^>]*>`)
 var htmlImgNoAltRe = regexp.MustCompile(`(?i)<img\b[^>]*src="([^"]+)"[^>]*>`)
 var htmlTagRe = regexp.MustCompile(`(?i)</?(?:div|p|br|hr|h[1-6]|li|ul|ol|blockquote|pre|table|tr|td|th|thead|tbody|section|article|header|footer|nav|aside|figure|figcaption|dl|dt|dd)[^>]*>`)
 var htmlAnyTagRe = regexp.MustCompile(`<[^>]+>`)

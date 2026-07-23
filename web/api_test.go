@@ -21,7 +21,7 @@ func setupTestServer(t *testing.T) *Server {
 		ShowAuthor: true,
 		Width:      600,
 	}
-	srv, err := NewServer(ServerConfig{Store: store, Host: "localhost", Scheme: "http", EmailLocal: "blog", EmailDomain: "localhost", HideEmail: true, Site: site, ListenHost: "0.0.0.0", Port: 8080})
+	srv, err := NewServer(ServerConfig{Store: store, Host: "localhost", Scheme: "http", EmailLocal: "blog", EmailDomain: "localhost", Site: site})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func setupTestServerWithWebhook(t *testing.T, secret string) *Server {
 		ShowAuthor: true,
 		Width:      600,
 	}
-	srv, err := NewServer(ServerConfig{Store: store, Host: "localhost", Scheme: "http", EmailLocal: "blog", EmailDomain: "localhost", HideEmail: true, Site: site, ListenHost: "0.0.0.0", Port: 8080})
+	srv, err := NewServer(ServerConfig{Store: store, Host: "localhost", Scheme: "http", EmailLocal: "blog", EmailDomain: "localhost", Site: site})
 	if err != nil {
 		t.Fatal(err)
 	}
