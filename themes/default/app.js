@@ -91,32 +91,29 @@
     return d.innerHTML;
   }
 
-  function renderMD(text) {
-    if (!text) return '';
-    var html = esc(text);
-    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, function(m, alt, src) {
-      if (!src.startsWith('http') && !src.startsWith('/')) {
-        src = currentBasePath() + '/' + src;
-      }
-      return '<figure><a href="' + src + '" target="_blank" rel="noopener"><img src="' + src + '" alt="' + alt + '"></a>' + (alt ? '<figcaption>' + alt + '</figcaption>' : '') + '</figure>';
+  function isRelativeAssetURL(url) {
+    return url && !url.startsWith('/') && !url.startsWith('#') && !url.startsWith('?') &&
+      !url.startsWith('//') && !/^[a-z][a-z0-9+.-]*:/i.test(url);
+  }
+
+  // Article HTML is rendered by the backend with Goldmark.  Keep image URLs
+  // relative to the article directory, as Markdown image references such as
+  // ![alt](1) are stored alongside the article.
+  function renderArticleBody(html) {
+    if (!html) return '';
+    var container = document.createElement('div');
+    container.innerHTML = html;
+    container.querySelectorAll('img[src]').forEach(function(img) {
+      var src = img.getAttribute('src');
+      if (!isRelativeAssetURL(src)) return;
+      var resolved = currentBasePath() + '/' + src;
+      img.setAttribute('src', resolved);
+
+      // renderMarkdown wraps Markdown images in a link to the same file.
+      var link = img.closest('a');
+      if (link && link.getAttribute('href') === src) link.setAttribute('href', resolved);
     });
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(m, text, url) {
-      var isExternal = url.startsWith('http://') || url.startsWith('https://');
-      return '<a href="' + url + '"' + (isExternal ? ' target="_blank"' : '') + '>' + text + '</a>';
-    });
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-    html = html.replace(/^---$/gm, '<hr>');
-    html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
-    html = html.replace(/\n\n/g, '</p><p>');
-    html = '<p>' + html + '</p>';
-    html = html.replace(/<p><\/p>/g, '');
-    html = html.replace(/\n/g, '<br>');
-    return html;
+    return container.innerHTML;
   }
 
   var _basePath = '';
@@ -365,7 +362,7 @@
     html += '<time class="date" datetime="' + datetimeISO(article.date) + '" data-orig="' + esc(article.date) + '" data-tz="' + esc(tz) + '">' + fmtDate(article.date) + '</time>';
     html += '<a href="/' + esc(baseSlug) + '" class="uid" title="permalink" data-address="/' + esc(baseSlug) + '">#' + esc(article.uniqueid) + '</a>';
     html += '</div>';
-    html += '<div class="article-body">' + renderMD(article.body) + '</div>';
+    html += '<div class="article-body">' + renderArticleBody(article.body_html) + '</div>';
 
     if (article.images && article.images.length) {
       var refs = (article.body.match(/!\[[^\]]*\]\(([^)]+)\)/g) || []).map(function(m) {
