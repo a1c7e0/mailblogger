@@ -178,39 +178,50 @@ a:hover {
   color: var(--fg-muted);
 }
 
-/* Settings bar: language + dark mode toggles */
-.settings-bar {
+/* Footer display controls */
+.display-settings {
   display: flex;
-  gap: 12px;
+  gap: 18px;
   align-items: center;
-  font-size: 12px;
-  color: var(--fg-ghost);
-  margin-top: 6px;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--footer-border);
 }
 
-.settings-bar button,
-.settings-bar select {
+.display-setting {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.display-setting-label {
+  color: var(--fg-ghost);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.display-settings button,
+.display-settings select {
   font-family: inherit;
   font-size: 12px;
-  color: var(--fg-ghost);
-  background: transparent;
+  color: var(--fg-muted);
+  background: var(--code-bg);
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
-  padding: 1px 6px;
+  border-radius: 4px;
+  padding: 4px 8px;
   cursor: pointer;
   line-height: 1.4;
 }
 
-.settings-bar button:hover,
-.settings-bar select:hover {
-  color: var(--fg-muted);
-  border-color: var(--fg-ghost);
+.display-settings button:hover,
+.display-settings select:hover {
+  color: var(--fg);
+  border-color: var(--fg-muted);
 }
 
-.settings-bar select {
-  -webkit-appearance: none;
-  appearance: none;
-  padding-right: 4px;
+.display-settings select {
+  min-width: 82px;
 }
 
 .article-list {
@@ -465,31 +476,28 @@ a:hover {
   color: var(--link-reply-hover);
 }
 
-/* Code block copy button */
-.code-block-wrap {
-  position: relative;
+/* Code block copy button. Themes can restyle this shared backend markup. */
+.code-block {
+  margin: 0 0 0.8em;
 }
-.code-block-wrap pre {
+.code-block-header {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0 4px;
+}
+.code-block pre {
   margin: 0;
 }
 .code-copy-btn {
-  position: absolute;
-  top: 6px;
-  right: 8px;
   font-family: inherit;
   font-size: 11px;
   color: var(--link-copy);
   background: var(--pre-bg);
   border: 1px solid var(--pre-border);
   border-radius: 3px;
-  padding: 1px 6px;
+  padding: 2px 7px;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s;
   line-height: 1.4;
-}
-.code-block-wrap:hover .code-copy-btn {
-  opacity: 1;
 }
 .code-copy-btn:hover {
   color: var(--link-copy-hover);
@@ -517,8 +525,9 @@ a:hover {
     margin-left: 14px;
     padding-left: 10px;
   }
-  .settings-bar {
-    flex-wrap: wrap;
+  .display-settings {
+    align-items: flex-start;
+    flex-direction: column;
     gap: 8px;
   }
   .article-date {
@@ -532,7 +541,7 @@ a:hover {
 
 /* Print styles */
 @media print {
-  .settings-bar,
+  .display-settings,
   .footer,
   .copy-link,
   .reply-link,

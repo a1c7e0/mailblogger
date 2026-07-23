@@ -150,7 +150,8 @@
     var shifted = new Date(d.getTime() + offsetMs);
     var pad = function(n) { return String(n).padStart(2, '0'); };
     return shifted.getUTCFullYear() + '-' + pad(shifted.getUTCMonth()+1) + '-' + pad(shifted.getUTCDate())
-         + ' ' + pad(shifted.getUTCHours()) + ':' + pad(shifted.getUTCMinutes());
+         + ' ' + pad(shifted.getUTCHours()) + ':' + pad(shifted.getUTCMinutes())
+         + ' ' + m[1] + m[2] + m[3];
   }
 
   function authorTooltip(hash, email) {
@@ -191,17 +192,20 @@
     articlesCacheTime = 0;
   }
 
-  // --- Settings bar: language + theme switchers ---
-  function initSettingsBar() {
-    var header = document.getElementById('header');
-    if (!header || header.querySelector('.settings-bar')) return;
+  // --- Display controls, kept with the footer rather than the site heading ---
+  function initDisplayControls() {
+    var footer = document.getElementById('footer');
+    if (!footer || footer.querySelector('.display-settings')) return;
 
-    var bar = document.createElement('div');
-    bar.className = 'settings-bar';
+    var panel = document.createElement('div');
+    panel.className = 'display-settings';
 
     // Language select
+    var languageGroup = document.createElement('label');
+    languageGroup.className = 'display-setting';
     var langLabel = document.createElement('span');
-    langLabel.textContent = '🌐 ';
+    langLabel.className = 'display-setting-label';
+    langLabel.textContent = t('language');
     var langSel = document.createElement('select');
     langSel.id = 'lang-select';
     var langNames = { en: 'English', zh: '中文' };
@@ -229,7 +233,15 @@
       route();
     });
 
+    languageGroup.appendChild(langLabel);
+    languageGroup.appendChild(langSel);
+
     // Theme button
+    var themeGroup = document.createElement('div');
+    themeGroup.className = 'display-setting';
+    var themeLabel = document.createElement('span');
+    themeLabel.className = 'display-setting-label';
+    themeLabel.textContent = t('appearance');
     var themeBtn = document.createElement('button');
     themeBtn.id = 'theme-toggle';
     var schemeLabels = { auto: t('theme_auto'), light: t('theme_light'), dark: t('theme_dark') };
@@ -246,10 +258,11 @@
       themeBtn.textContent = syms[next] + ' ' + labels[next];
     });
 
-    bar.appendChild(langLabel);
-    bar.appendChild(langSel);
-    bar.appendChild(themeBtn);
-    header.appendChild(bar);
+    themeGroup.appendChild(themeLabel);
+    themeGroup.appendChild(themeBtn);
+    panel.appendChild(languageGroup);
+    panel.appendChild(themeGroup);
+    footer.appendChild(panel);
   }
 
   // --- Render functions ---
@@ -272,7 +285,6 @@
       html += '</nav>';
     }
     document.getElementById('header').innerHTML = html;
-    initSettingsBar();
     document.title = locale.title || 'Blog';
     document.documentElement.lang = s.lang || 'en';
   }
@@ -295,6 +307,7 @@
       }
     }
     document.getElementById('footer').innerHTML = html;
+    initDisplayControls();
   }
 
   async function renderIndex() {
@@ -329,7 +342,6 @@
     }
     document.getElementById('app').innerHTML = html;
     initCopyLinks();
-    initTimeHover();
   }
 
   async function renderArticle(id) {
@@ -359,7 +371,7 @@
     html += '<div class="article-meta-bar">';
     html += '<span class="author" title="' + esc(authorTooltip(article.author_hash, article.author_email)) + '">' + esc(article.author) + '</span>';
     var tz = getTzOffset(article.date) || '';
-    html += '<time class="date" datetime="' + datetimeISO(article.date) + '" data-orig="' + esc(article.date) + '" data-tz="' + esc(tz) + '">' + fmtDate(article.date) + '</time>';
+    html += '<time class="date" datetime="' + datetimeISO(article.date) + '" data-orig="' + esc(article.date) + '" data-tz="' + esc(tz) + '">' + fmtDateInTz(article.date, tz) + '</time>';
     html += '<a href="/' + esc(baseSlug) + '" class="uid" title="permalink" data-address="/' + esc(baseSlug) + '">#' + esc(article.uniqueid) + '</a>';
     html += '</div>';
     html += '<div class="article-body">' + renderArticleBody(article.body_html) + '</div>';
@@ -445,7 +457,7 @@
     html += '<div class="comment-header">';
     html += '<span class="author" title="' + esc(authorTooltip(c.author_hash, c.author_email)) + '">' + esc(c.author) + '</span>';
     var ctz = getTzOffset(c.date) || '';
-    html += '<time class="date" datetime="' + datetimeISO(c.date) + '" data-orig="' + esc(c.date) + '" data-tz="' + esc(ctz) + '">' + fmtDate(c.date) + '</time>';
+    html += '<time class="date" datetime="' + datetimeISO(c.date) + '" data-orig="' + esc(c.date) + '" data-tz="' + esc(ctz) + '">' + fmtDateInTz(c.date, ctz) + '</time>';
     html += ' <a href="/' + esc(baseSlug) + '#c-' + c.uniqueid + '" class="uid" title="permalink" data-address="/' + esc(baseSlug) + '#c-' + c.uniqueid + '">#' + esc(c.uniqueid) + '</a>';
     if (!c.deleted) {
       var mailtoLink = makeMailto(c.uniqueid, article.subject, article.email_local, article.email_domain, c.body, c.author, fmtDate(c.date), true);
@@ -468,7 +480,7 @@
       html += '<details class="comment-edits"><summary>' + t('edit_history') + ' (' + c.edits.length + ')</summary>';
       c.edits.forEach(function(e) {
         var etz = getTzOffset(e.date) || '';
-        html += '<div class="edit-entry"><time data-orig="' + esc(e.date) + '" data-tz="' + esc(etz) + '">' + fmtDate(e.date) + '</time>';
+        html += '<div class="edit-entry"><time data-orig="' + esc(e.date) + '" data-tz="' + esc(etz) + '">' + fmtDateInTz(e.date, etz) + '</time>';
         html += '<div class="edit-body">' + esc(e.body).replace(/\n/g, '<br>') + '</div></div>';
       });
       html += '</details>';
@@ -536,15 +548,12 @@
   }
 
   function initCodeCopyButtons() {
-    document.querySelectorAll('.article-body pre, .comment-body pre').forEach(function(pre) {
-      if (pre.parentNode.classList.contains('code-block-wrap')) return;
-      var wrap = document.createElement('div');
-      wrap.className = 'code-block-wrap';
-      pre.parentNode.insertBefore(wrap, pre);
-      wrap.appendChild(pre);
-      var btn = document.createElement('button');
-      btn.className = 'code-copy-btn';
-      btn.textContent = 'copy';
+    document.querySelectorAll('.code-copy-btn[data-code-copy]').forEach(function(btn) {
+      if (btn.dataset.copyInitialized) return;
+      var block = btn.closest('.code-block');
+      var pre = block && block.querySelector('pre');
+      if (!pre) return;
+      btn.dataset.copyInitialized = 'true';
       btn.addEventListener('click', function() {
         navigator.clipboard.writeText(pre.textContent).then(function() {
           btn.textContent = 'copied!';
@@ -554,7 +563,6 @@
           setTimeout(function() { btn.textContent = 'copy'; }, 1500);
         });
       });
-      wrap.appendChild(btn);
     });
   }
 
@@ -586,10 +594,8 @@
 
     var isIndex = (path === '/' || path === '');
 
-    // Footer only on non-index
-    if (!isIndex || _initialLoad || langChanged) {
-      await renderFooter(isIndex);
-    }
+    // The footer is shared across routes, so refresh it when returning to the index.
+    await renderFooter(isIndex);
 
     // Content transition: fade out, swap, fade in
     var appEl = document.getElementById('app');

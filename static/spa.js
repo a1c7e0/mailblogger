@@ -39,6 +39,25 @@
       link.setAttribute('href', href.substring(0, pos + 6) + encodeURIComponent(body));
     });
     var emailLocal = getEmailLocal();
+	    document.querySelectorAll('.code-copy-btn[data-code-copy]').forEach(function(btn) {
+	      btn.removeEventListener('click', btn._codeCopyHandler);
+	      btn._codeCopyHandler = function() {
+	        var block = this.closest('.code-block');
+	        var pre = block && block.querySelector('pre');
+	        if (!pre) return;
+	        var original = this.textContent;
+	        navigator.clipboard.writeText(pre.textContent).then(function() {
+	          this.textContent = 'copied!';
+	          var that = this;
+	          setTimeout(function() { that.textContent = original; }, 1500);
+	        }.bind(this)).catch(function() {
+	          this.textContent = 'error';
+	          var that = this;
+	          setTimeout(function() { that.textContent = original; }, 1500);
+	        }.bind(this));
+	      };
+	      btn.addEventListener('click', btn._codeCopyHandler);
+	    });
     document.querySelectorAll('.copy-link,.uid[data-address]').forEach(function(btn) {
       btn.removeEventListener('click', btn._copyHandler);
       btn._copyHandler = function(e) {

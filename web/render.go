@@ -45,12 +45,20 @@ func renderMarkdown(input string) template.HTML {
 	if err := md.Convert([]byte(input), &buf); err != nil {
 		return template.HTML(template.HTMLEscapeString(input))
 	}
-	return template.HTML(wrapImages(buf.String()))
+	html := wrapImages(buf.String())
+	return template.HTML(wrapCodeBlocks(html))
 }
 
 var imgTagReFull = regexp.MustCompile(`<img\s+[^>]*src="([^"]+)"[^>]*alt="([^"]*)"[^>]*>`)
 var imgTagReAltFirst = regexp.MustCompile(`<img\s+[^>]*alt="([^"]*)"[^>]*src="([^"]+)"[^>]*>`)
 var imgTagReNoAlt = regexp.MustCompile(`<img\s+src="([^"]+)"[^>]*>`)
+var codeBlockRe = regexp.MustCompile(`(?s)<pre><code([^>]*)>(.*?)</code></pre>`)
+
+// wrapCodeBlocks provides stable markup for themes to style and enhance. The
+// button stays in normal document flow above the code, rather than overlaying it.
+func wrapCodeBlocks(html string) string {
+	return codeBlockRe.ReplaceAllString(html, `<div class="code-block"><div class="code-block-header"><button type="button" class="code-copy-btn" data-code-copy>copy</button></div><pre><code$1>$2</code></pre></div>`)
+}
 
 func wrapImages(html string) string {
 	html = imgTagReAltFirst.ReplaceAllStringFunc(html, func(match string) string {

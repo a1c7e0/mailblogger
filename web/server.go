@@ -1,4 +1,5 @@
 package web
+
 import (
 	"crypto/rand"
 	"embed"
@@ -263,6 +264,11 @@ func (s *Server) handleSPA(w http.ResponseWriter, r *http.Request) {
 	// Resolve theme based on language
 	theme := s.resolveTheme(r)
 	if theme != "" {
+		// Theme routes are normally served by the SPA shell, but article media
+		// must remain directly accessible at /<article>/<filename>.
+		if s.serveExistingArticleFile(w, r, path) {
+			return
+		}
 		themeDir := filepath.Join("themes", theme)
 		indexPath := filepath.Join(themeDir, "index.html")
 		if _, err := os.Stat(indexPath); err == nil {
@@ -428,10 +434,20 @@ func (s *Server) renderArticleBodyWithComments(w http.ResponseWriter, article *b
 }
 
 func (s *Server) serveArticleFile(w http.ResponseWriter, r *http.Request, articleID, filename string) {
-	filename = filepath.Base(filename)
-	if filename == "." || filename == "/" {
-		http.NotFound(w, r)
+	if s.serveExistingArticleFile(w, r, strings.TrimPrefix(articleID+"/"+filename, "/")) {
 		return
+	}
+	http.NotFound(w, r)
+}
+
+func (s *Server) serveExistingArticleFile(w http.ResponseWriter, r *http.Request, path string) bool {
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) != 2 || parts[1] == "" {
+		return false
+	}
+	articleID, filename := parts[0], filepath.Base(parts[1])
+	if filename == "." || filename == "/" {
+		return false
 	}
 
 	dir, err := s.Store.GetArticleDir(articleID)
@@ -439,25 +455,27 @@ func (s *Server) serveArticleFile(w http.ResponseWriter, r *http.Request, articl
 		// Try slug
 		a, err2 := s.Store.GetArticleBySlug(articleID)
 		if err2 != nil {
-			http.NotFound(w, r)
-			return
+			return false
 		}
 		dir, err = s.Store.GetArticleDir(a.UniqueID)
 		if err != nil {
-			http.NotFound(w, r)
-			return
+			return false
 		}
 	}
 	if !strings.Contains(filename, ".") {
 		entries, err := filepath.Glob(filepath.Join(dir, filename+".*"))
 		if err != nil || len(entries) == 0 {
-			http.NotFound(w, r)
-			return
+			return false
 		}
 		http.ServeFile(w, r, entries[0])
-		return
+		return true
 	}
-	http.ServeFile(w, r, filepath.Join(dir, filename))
+	filePath := filepath.Join(dir, filename)
+	if info, err := os.Stat(filePath); err != nil || info.IsDir() {
+		return false
+	}
+	http.ServeFile(w, r, filePath)
+	return true
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {

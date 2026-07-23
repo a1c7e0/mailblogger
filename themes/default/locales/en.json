@@ -18,6 +18,8 @@
   "copied": "[copied]",
   "copy_error": "[error]",
   "lang_auto": "Auto",
+  "language": "Language",
+  "appearance": "Appearance",
   "theme_auto": "Auto",
   "theme_light": "Light",
   "theme_dark": "Dark"
