@@ -103,7 +103,7 @@ Article detail. `{id}` can be hash or slug.
 }
 ```
 
-`body_html`: server-rendered HTML from goldmark (GFM + footnotes + definition lists). Use this instead of client-side markdown rendering when possible.
+`body_html`: server-rendered HTML from Goldmark (GFM + footnotes + definition lists). Use this instead of client-side markdown rendering when possible. Fenced code blocks include `.code-block`, `.code-block-header`, and `.code-copy-btn[data-code-copy]` markup; a client theme can attach its own clipboard behavior.
 
 With `?include=comments`:
 ```json

@@ -130,6 +130,8 @@ theme:
 
 Theme files go in `themes/<name>/`. See [docs/themes.md](docs/themes.md) for the full theme authoring guide.
 
+Article `body_html` is rendered by the backend, including GFM, image figures, and copy-button markup for fenced code blocks. Themes can style this shared output and attach the copy interaction themselves.
+
 ## Configuration
 
 See `config.example.yaml` for all options. Key fields:

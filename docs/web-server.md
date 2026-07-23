@@ -5,7 +5,7 @@
 | File | Responsibility |
 |---|---|
 | `web/server.go` | HTTP routing, handlers, SPA, settings page, template setup |
-| `web/render.go` | Markdown→HTML, image wrapping, date formatting, mailto links, excerpt |
+| `web/render.go` | Markdown→HTML, image/code-block wrapping, date formatting, mailto links, excerpt |
 | `web/assets.go` | Favicon/avatar detection, ICO generation, base64 encoding |
 | `web/api.go` | REST API endpoints, raw email webhook |
 | `web/feed.go` | Atom feed generation with 5min cache |
@@ -36,7 +36,7 @@
 
 ## SPA Mode
 
-When `theme` is configured, `handleSPA` serves `themes/<name>/index.html` for all non-API, non-static routes. The theme's `app.js` fetches data from the JSON API.
+When `theme` is configured, `handleSPA` serves `themes/<name>/index.html` for page routes. Article media routes (`/<article-id-or-slug>/<filename>`) are resolved before the SPA shell and are served directly. The theme's `app.js` fetches page data from the JSON API.
 
 Without a theme, `handleSPA` falls back to SSR: `handleIndex` for `/`, `handleArticle` for `/<id>`.
 
@@ -44,7 +44,7 @@ Without a theme, `handleSPA` falls back to SSR: `handleIndex` for `/`, `handleAr
 
 | Name | Description |
 |---|---|
-| `renderMD` | Goldmark markdown → HTML with figure wrapping |
+| `renderMD` | Goldmark markdown → HTML with image and code-block wrapping |
 | `renderPlaintext` | Plain text with URL auto-linking and `<br>` |
 | `mailto` | Generate mailto: link with quoted body |
 | `fmtDate` / `fmtDateTitle` / `datetimeISO` | Date formatting (UTC, tooltip, ISO) |
@@ -57,6 +57,7 @@ Without a theme, `handleSPA` falls back to SSR: `handleIndex` for `/`, `handleAr
 1. `ensureImageBreaks()` — add blank lines around `![...](...)` references
 2. Goldmark renders markdown → HTML (GFM + footnotes + definition lists)
 3. `wrapImages()` — wrap `<img>` in `<figure>` + `<a target="_blank">` + `<figcaption>`
+4. `wrapCodeBlocks()` — wrap each fenced code block in `.code-block` markup and emit a `.code-copy-btn[data-code-copy]` before the `<pre>` element. Themes can position and style the button in normal document flow; their JavaScript is responsible for clipboard interaction.
 
 ## Comment Filtering
 

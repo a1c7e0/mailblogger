@@ -40,7 +40,7 @@ Core concepts and their canonical names in the MailBlogger domain.
 
 ## Web
 
-- **SPA** — single-page application mode. When a theme is configured, all non-API routes serve the theme's `index.html`.
+- **SPA** — single-page application mode. When a theme is configured, page routes serve the theme's `index.html`; article media routes still serve files directly.
 - **SSR** — server-side rendering fallback. Uses Go `html/template` when no theme is configured.
 - **Theme** — client-side frontend in `themes/<name>/`. Contains `index.html`, `app.js`, and optional locale files.
 - **Feed Cache** — 5-minute TTL cache for Atom feeds, invalidated on article changes.

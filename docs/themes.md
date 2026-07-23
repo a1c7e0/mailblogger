@@ -1,6 +1,6 @@
 # Theme System
 
-Themes control the entire frontend. When a theme is configured, all non-API, non-static routes serve the theme's `index.html` instead of server-rendered templates.
+Themes control the entire frontend. When a theme is configured, page routes serve the theme's `index.html` instead of server-rendered templates; article media routes continue to serve their files directly.
 
 ## Configuration
 
@@ -91,6 +91,8 @@ Standard locale keys used by the default theme:
   "copied": "[copied]",
   "copy_error": "[error]",
   "lang_auto": "Auto",
+  "language": "Language",
+  "appearance": "Appearance",
   "theme_auto": "Auto",
   "theme_light": "Light",
   "theme_dark": "Dark"
@@ -98,6 +100,21 @@ Standard locale keys used by the default theme:
 ```
 
 Use `{{variable}}` syntax for interpolation. Theme code accesses strings via `t('key', {var: value})`.
+
+## Rendered Markdown
+
+Use `body_html` for article content. It is server-rendered with Goldmark and includes stable markup around fenced code blocks:
+
+```html
+<div class="code-block">
+  <div class="code-block-header">
+    <button type="button" class="code-copy-btn" data-code-copy>copy</button>
+  </div>
+  <pre><code>...</code></pre>
+</div>
+```
+
+The button is emitted before the code block in normal document flow, so themes can place it above, beside, or otherwise style it without modifying the Markdown renderer. A theme must attach clipboard behavior to `.code-copy-btn[data-code-copy]` and copy the sibling `.code-block pre` text.
 
 ## Creating a Custom Theme
 
@@ -186,6 +203,12 @@ Article images are stored as sequential files (`1.webp`, `2.gif`). Reference in 
 For the article page, set `<base href="/<slug-or-id>/">` so relative `src="1"` resolves correctly.
 
 The `images` array in the article API response lists all image filenames. Unreferenced images (not in the markdown body) can be shown in an "Attachments" section.
+
+With a theme enabled, article media URLs such as `/<slug>/1` and `/<slug>/1.webp` are served directly rather than returning the SPA entry point. Themes that do not use a document `<base>` should rewrite relative image `src` values in `body_html` to the article URL before inserting it.
+
+## Default Theme Controls
+
+The built-in default theme renders its language and color-scheme controls in the footer. It stores explicit choices in `localStorage` (`lang` and `color-scheme`) and uses browser preferences when either value is set to `auto`.
 
 ### Comment Threading
 

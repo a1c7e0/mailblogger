@@ -90,9 +90,11 @@ No DKIM header → pass through. Verification fails → reject.
 ## Image Handling (`email/images.go`)
 
 - `extractImagesFromMultipart()`: recursive image extraction from MIME parts
-- `convertToWebp()`: JPEG/PNG → WebP (CGo); GIF/WebP pass through
+- `convertToWebp()`: JPEG/PNG → WebP (CGo); registers JPEG and PNG decoders before decoding. GIF/WebP pass through unchanged.
 - `saveArticleImages()`: sequential files (`1.webp`, `2.gif`), CID→number map
 - `saveCommentImages()`: prefix `c_<commentUID>_<N>.<ext>`
+
+Conversion occurs when a message is received or an article is edited. Existing image files are not retroactively rewritten.
 
 ## RawMessage Struct
 

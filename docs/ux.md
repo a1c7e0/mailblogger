@@ -10,8 +10,8 @@
 ## Timestamps
 
 - Server: RFC3339 with timezone, rendered as `<time datetime="...">` elements
-- Client: JS converts to local timezone on page load
-- Index: date only (`YYYY-MM-DD`); article/comments: datetime with timezone
+- SSR fallback: JS converts timestamps to the visitor's local timezone on page load
+- Default theme: index entries show a fixed date only (`YYYY-MM-DD`); article, comment, and edit-history timestamps show the publisher offset directly (`YYYY-MM-DD HH:MM +0800`)
 - Tooltip: `YYYY-MM-DD HH:MM:SS +0000 (Unix: ...)`
 
 ## Interactive Elements
@@ -20,6 +20,7 @@
 - **Copy address**: `<mailbox>+<uid>@domain` to clipboard, `[copied]` for 1.5s
 - **Copy permalink**: `/<slug>#c-<uid>` to clipboard via `#uniqueid` click
 - **Comment highlight**: click `↳ author #uid` → outline + scroll to target; `#c-<id>` in URL triggers on load
+- **Code copy**: backend-rendered fenced code blocks include a copy button above the code. Themes may position it using the `.code-block` and `.code-block-header` wrappers without overlaying code text.
 
 ## Pagination
 
@@ -45,6 +46,7 @@ All reference lines `>` prefixed for clean `stripEmailQuotes()` separation.
 
 - **Article images**: sequential files (`1.webp`), referenced as `![alt](1)` (no extension)
 - **`<base>` tag**: ensures relative `src="1"` resolves to `/slug/1`
+- **Theme media routes**: `/<slug>/1` and `/<slug>/1.webp` are served as article files even while SPA theme mode is enabled
 - **wrapImages()**: `<img>` → `<figure>` + `<a target="_blank">` + `<figcaption>`
 - **Unreferenced images**: shown in "Attachments" section below article
 - **Comment images**: `c_<uid>_<N>.<ext>`, shown as clickable filename links (not inline)
@@ -66,3 +68,4 @@ All reference lines `>` prefixed for clean `stripEmailQuotes()` separation.
 - `site.width` — max content width
 - `site.links` — nav links below subtitle
 - `site.auto_lang` — Accept-Language detection for per-language themes
+- Default theme language and color-scheme controls live in the footer; explicit choices are persisted in `localStorage`

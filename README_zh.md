@@ -123,6 +123,8 @@ theme: default
 
 主题文件放在 `themes/<名称>/` 下。完整的主题开发指南见 [docs/themes.md](docs/themes.md)。
 
+文章的 `body_html` 由后端渲染，包含 GFM、图片 figure，以及围栏代码块的复制按钮标记。主题可直接样式化这套共享输出，并自行绑定复制交互。
+
 ## 配置
 
 所有选项见 `config.example.yaml`。主要字段：

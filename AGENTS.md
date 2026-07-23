@@ -55,7 +55,7 @@ email/
   dkim.go           → DKIM signature verification via DNS
 web/
   server.go         → HTTP routing, handlers, SPA, settings page
-  render.go         → Markdown→HTML, image wrapping, date formatting, mailto links
+  render.go         → Markdown→HTML, image/code-block wrapping, date formatting, mailto links
   assets.go         → Favicon/avatar detection, ICO generation
   api.go            → REST API: POST article/comment, GET site/articles/status, raw-email webhook
   feed.go           → Atom feed generation with 5min cache
