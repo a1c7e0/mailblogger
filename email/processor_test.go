@@ -147,6 +147,26 @@ func TestStripEmailQuotesStripsDashSeparator(t *testing.T) {
 	}
 }
 
+func TestCleanBodyNBSP(t *testing.T) {
+	// Non-breaking spaces (U+00A0, UTF-8: \xc2\xa0) from email clients
+	// should be replaced with regular spaces
+	input := "Hello\xc2\xa0\xc2\xa0World\xc2\xa0test"
+	got := cleanBody(input)
+	want := "Hello  World test"
+	if got != want {
+		t.Errorf("cleanBody nbsp = %q, want %q", got, want)
+	}
+}
+
+func TestCleanBodyPreservesLists(t *testing.T) {
+	// Lists with regular spaces should be preserved
+	input := "* item one\n* item two\n\n1. first\n2. second"
+	got := cleanBody(input)
+	if got != input {
+		t.Errorf("cleanBody should preserve lists\ngot:  %q\nwant: %q", got, input)
+	}
+}
+
 func TestDecodeBodyBase64(t *testing.T) {
 	input := "SGVsbG8gV29ybGQ="
 	got := decodeBody([]byte(input), "base64")

@@ -19,6 +19,7 @@ var md = goldmark.New(
 		extension.GFM,
 		extension.Footnote,
 		extension.DefinitionList,
+		extension.Typographer,
 	),
 )
 

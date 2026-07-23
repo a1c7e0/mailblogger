@@ -353,6 +353,8 @@ func decodeBody(data []byte, enc string) string {
 func cleanBody(body string) string {
 	body = strings.TrimSpace(body)
 	body = strings.ReplaceAll(body, "\r\n", "\n")
+	// Replace non-breaking spaces (common in email clients) with regular spaces
+	body = strings.ReplaceAll(body, "\xc2\xa0", " ")
 	return body
 }
 
