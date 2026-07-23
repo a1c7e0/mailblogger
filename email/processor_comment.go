@@ -64,7 +64,7 @@ func (p *Processor) processComment(raw *RawMessage, targetID string) error {
 		AuthorHash:  authorHash,
 		AuthorEmail: addr,
 		Date:        date,
-		Body:        raw.Body,
+		Body:        stripEmailQuotes(raw.Body),
 		ReplyTo:     replyTo,
 	}
 
@@ -92,7 +92,7 @@ func (p *Processor) processComment(raw *RawMessage, targetID string) error {
 }
 
 func (p *Processor) handleEditCommentCommand(raw *RawMessage, comment *blog.Comment, articleID string) error {
-	if err := p.Store.EditComment(articleID, comment.UniqueID, raw.Body); err != nil {
+	if err := p.Store.EditComment(articleID, comment.UniqueID, stripEmailQuotes(raw.Body)); err != nil {
 		log.Printf("edit comment %s failed: %v", comment.UniqueID, err)
 		return err
 	}

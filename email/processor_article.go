@@ -27,6 +27,7 @@ func (p *Processor) processArticle(raw *RawMessage) error {
 	cleanSubj = stripNotifyTags(cleanSubj)
 
 	bodyCfg, body, _ := parseBodyConfig(raw.Body)
+	body = stripEmailQuotes(body)
 	banner := ""
 	notifyTag := ""
 	if bodyCfg != nil {
@@ -141,6 +142,7 @@ func (p *Processor) handleEditCommand(raw *RawMessage, article *blog.Article) er
 	}
 
 	bodyCfg, body, _ := parseBodyConfig(raw.Body)
+	body = stripEmailQuotes(body)
 	if bodyCfg != nil {
 		if b, ok := bodyCfg["banner"]; ok {
 			article.Banner = strings.TrimSpace(b)

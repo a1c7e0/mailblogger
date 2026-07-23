@@ -120,6 +120,33 @@ func TestStripEmailQuotes(t *testing.T) {
 	}
 }
 
+func TestStripEmailQuotesPreservesBlockquotes(t *testing.T) {
+	// Markdown blockquotes should NOT be stripped
+	input := "### Blockquotes\n\nMarkdown uses email-style `>` characters.\n\n> This is a blockquote.\n> Second line.\n\nMore text after."
+	got := stripEmailQuotes(input)
+	if got != input {
+		t.Errorf("stripEmailQuotes should preserve markdown blockquotes\ngot:  %q\nwant: %q", got, input)
+	}
+}
+
+func TestStripEmailQuotesStripsOnWroteChain(t *testing.T) {
+	// "On ... wrote:" with > quoted lines should be stripped
+	input := "My message\n\nOn Mon, Jan 1, Alice wrote:\n> their reply\n> more reply"
+	got := stripEmailQuotes(input)
+	if got != "My message" {
+		t.Errorf("stripEmailQuotes = %q, want 'My message'", got)
+	}
+}
+
+func TestStripEmailQuotesStripsDashSeparator(t *testing.T) {
+	// Standalone "---" separator should be stripped
+	input := "My message\n\n---\nSignature here"
+	got := stripEmailQuotes(input)
+	if got != "My message" {
+		t.Errorf("stripEmailQuotes = %q, want 'My message'", got)
+	}
+}
+
 func TestDecodeBodyBase64(t *testing.T) {
 	input := "SGVsbG8gV29ybGQ="
 	got := decodeBody([]byte(input), "base64")

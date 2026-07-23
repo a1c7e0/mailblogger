@@ -353,11 +353,11 @@ func decodeBody(data []byte, enc string) string {
 func cleanBody(body string) string {
 	body = strings.TrimSpace(body)
 	body = strings.ReplaceAll(body, "\r\n", "\n")
-	body = stripEmailQuotes(body)
 	return body
 }
 
-var quoteRe = regexp.MustCompile(`(?im)^(On\s+.+\s+wrote:|[>\|]\s|^---$)`)
+var wroteRe = regexp.MustCompile(`(?im)^On\s+.+\s+wrote:`)
+var dashLineRe = regexp.MustCompile(`^-{3}$`)
 
 // stripEmailQuotes removes quoted reply content from email bodies.
 // It preserves user-authored ">" quotes in the body, only stripping
@@ -366,7 +366,8 @@ var quoteRe = regexp.MustCompile(`(?im)^(On\s+.+\s+wrote:|[>\|]\s|^---$)`)
 // Strategy:
 // 1. Look for the reply-template marker: "> ---" followed by "Write your reply above this line"
 // 2. If found, truncate from that marker to end of body
-// 3. Otherwise, fall back to truncating at first "On ... wrote:" or "---" line
+// 3. Otherwise, look for "On ... wrote:" header and strip everything from there
+//    (handles email quote chains with ">" prefix and "---" separators)
 func stripEmailQuotes(body string) string {
 	lines := strings.Split(body, "\n")
 
@@ -391,9 +392,10 @@ func stripEmailQuotes(body string) string {
 		}
 	}
 
-	// Fallback: truncate at first "On ... wrote:" or standalone "---"
+	// Look for "On ... wrote:" header — truncate from there
+	// This covers email quote chains (">" prefix) and "---" separators
 	for i, line := range lines {
-		if quoteRe.MatchString(line) {
+		if wroteRe.MatchString(line) {
 			result := strings.TrimSpace(strings.Join(lines[:i], "\n"))
 			if result == "" {
 				return body
@@ -401,6 +403,18 @@ func stripEmailQuotes(body string) string {
 			return result
 		}
 	}
+
+	// Look for standalone "---" separator (email signature divider)
+	for i, line := range lines {
+		if dashLineRe.MatchString(strings.TrimSpace(line)) {
+			result := strings.TrimSpace(strings.Join(lines[:i], "\n"))
+			if result == "" {
+				return body
+			}
+			return result
+		}
+	}
+
 	return body
 }
 
