@@ -30,12 +30,25 @@ type MailConfig struct {
 	SMTP      SMTPConfig   `yaml:"smtp"`
 	Whitelist []string     `yaml:"whitelist"`
 	Notify    NotifyConfig `yaml:"notify"`
+	DKIM      DKIMPolicy   `yaml:"dkim"`
 }
 
 type NotifyConfig struct {
 	Article bool `yaml:"article"`
 	Comment bool `yaml:"comment"`
 }
+
+// DKIMPolicy controls DKIM verification strictness.
+// "none" = skip DKIM entirely
+// "normal" = reject invalid signatures, allow unsigned (default)
+// "strict" = reject invalid + unsigned for comments
+type DKIMPolicy string
+
+const (
+	DKIMNone   DKIMPolicy = "none"
+	DKIMNormal DKIMPolicy = "normal"
+	DKIMStrict DKIMPolicy = "strict"
+)
 
 type IMAPConfig struct {
 	Server   string `yaml:"server"`

@@ -1,13 +1,18 @@
 package web
 
 import (
+	"crypto/md5"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"net/mail"
 	"net/http"
+	"net/mail"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -138,7 +143,17 @@ func (s *Server) handleAPISite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+	// Load theme.json
+	theme := s.resolveTheme(r)
+	var themeData map[string]interface{}
+	if theme != "" {
+		themePath := filepath.Join("themes", theme, "theme.json")
+		if data, err := os.ReadFile(themePath); err == nil {
+			json.Unmarshal(data, &themeData)
+		}
+	}
+
+	resp := map[string]interface{}{
 		"lang":         s.Site.Lang,
 		"show_author":  s.Site.ShowAuthor,
 		"avatar":       s.Site.Avatar,
@@ -146,20 +161,42 @@ func (s *Server) handleAPISite(w http.ResponseWriter, r *http.Request) {
 		"links":        s.Site.Links,
 		"email_local":  s.EmailLocal,
 		"email_domain": s.EmailDomain,
-	})
+	}
+	// Merge theme.json fields
+	for k, v := range themeData {
+		if _, exists := resp[k]; !exists {
+			resp[k] = v
+		}
+	}
+	s.writeJSONCached(w, r, resp, 10)
 }
 
-// GET /api/articles.json
+// GET /api/articles
 func (s *Server) handleAPIArticles(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	articles, err := s.Store.ListArticles()
+
+	page := 1
+	perPage := 20
+	if p := r.URL.Query().Get("page"); p != "" {
+		if n, err := strconv.Atoi(p); err == nil && n > 0 {
+			page = n
+		}
+	}
+	if pp := r.URL.Query().Get("per_page"); pp != "" {
+		if n, err := strconv.Atoi(pp); err == nil && n > 0 && n <= 100 {
+			perPage = n
+		}
+	}
+
+	articles, total, err := s.Store.ListArticlesPaged(page, perPage)
 	if err != nil {
 		s.writeJSON(w, http.StatusInternalServerError, APIResponse{Error: err.Error()})
 		return
 	}
+
 	type articleSummary struct {
 		UniqueID   string `json:"uniqueid"`
 		Slug       string `json:"slug,omitempty"`
@@ -183,10 +220,22 @@ func (s *Server) handleAPIArticles(w http.ResponseWriter, r *http.Request) {
 			Excerpt:    excerpt(a.Body, 160),
 		})
 	}
-	s.writeJSON(w, http.StatusOK, result)
+
+	totalPages := (total + perPage - 1) / perPage
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	s.writeJSONCached(w, r, map[string]interface{}{
+		"articles":   result,
+		"total":      total,
+		"page":       page,
+		"per_page":   perPage,
+		"total_pages": totalPages,
+	}, 5)
 }
 
-// GET /api/article/{id}.json
+// GET /api/article/{id}
 func (s *Server) handleAPIArticleDetail(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -202,7 +251,8 @@ func (s *Server) handleAPIArticleDetail(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	images, _ := s.Store.ListImages(article.UniqueID)
-	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+
+	resp := map[string]interface{}{
 		"uniqueid":     article.UniqueID,
 		"slug":         article.Slug,
 		"subject":      article.Subject,
@@ -212,13 +262,39 @@ func (s *Server) handleAPIArticleDetail(w http.ResponseWriter, r *http.Request) 
 		"date":         article.Date.Format(time.RFC3339),
 		"banner":       article.Banner,
 		"body":         article.Body,
+		"body_html":    string(renderMarkdown(article.Body)),
 		"images":       images,
 		"email_local":  s.EmailLocal,
 		"email_domain": s.EmailDomain,
-	})
+	}
+
+	// Optionally include comments
+	if r.URL.Query().Get("include") == "comments" {
+		limit := 50
+		if l := r.URL.Query().Get("comments_limit"); l != "" {
+			if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 200 {
+				limit = n
+			}
+		}
+		comments, err := s.Store.GetFilteredComments(article.UniqueID, blog.FilterOptions{
+			ShowDeleted: s.Store.History.ShowDeleted,
+			ShowReplies: s.Store.History.ShowReplies,
+		})
+		if err != nil {
+			comments = nil
+		}
+		total := len(comments)
+		if len(comments) > limit {
+			comments = comments[:limit]
+		}
+		resp["comments"] = comments
+		resp["comments_total"] = total
+	}
+
+	s.writeJSONCached(w, r, resp, 5)
 }
 
-// GET /api/article/{id}/comments.json
+// GET /api/article/{id}/comments
 func (s *Server) handleAPIArticleComments(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -240,7 +316,41 @@ func (s *Server) handleAPIArticleComments(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		comments = nil
 	}
-	s.writeJSON(w, http.StatusOK, comments)
+	s.writeJSONCached(w, r, comments, 3)
+}
+
+// GET /api/locale?lang=zh
+func (s *Server) handleAPILocale(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	lang := r.URL.Query().Get("lang")
+	if lang == "" {
+		lang = s.Site.Lang
+	}
+	theme := s.resolveTheme(r)
+	if theme == "" {
+		theme = "default"
+	}
+	localeDir := filepath.Join("themes", theme, "locales")
+
+	// Load en as base
+	base := make(map[string]interface{})
+	if data, err := os.ReadFile(filepath.Join(localeDir, "en.json")); err == nil {
+		json.Unmarshal(data, &base)
+	}
+	// Merge requested language on top
+	if lang != "en" {
+		if data, err := os.ReadFile(filepath.Join(localeDir, lang+".json")); err == nil {
+			var langData map[string]interface{}
+			json.Unmarshal(data, &langData)
+			for k, v := range langData {
+				base[k] = v
+			}
+		}
+	}
+	s.writeJSONCached(w, r, base, 30)
 }
 
 func (s *Server) handleAPIRawEmail(w http.ResponseWriter, r *http.Request) {
@@ -342,11 +452,34 @@ func (s *Server) newProcessor() *email.Processor {
 	if cfg.Mail.SMTP.Server != "" && cfg.Mail.SMTP.Password != "" {
 		sender = email.NewSMTPSender(cfg.Mail.SMTP.Server, cfg.Mail.SMTP.Port, cfg.Mail.SMTP.Username, cfg.Mail.SMTP.Password)
 	}
-	return email.NewProcessor(s.Store, s.EmailLocal, s.EmailDomain, s.Host, s.Scheme, nil, sender)
+	return email.NewProcessor(s.Store, s.EmailLocal, s.EmailDomain, s.Host, s.Scheme, nil, sender, cfg.Mail.DKIM)
 }
 
 func (s *Server) writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
+}
+
+// writeJSONCached writes JSON with ETag + Cache-Control. Returns true if 304 was sent.
+func (s *Server) writeJSONCached(w http.ResponseWriter, r *http.Request, v interface{}, maxAge int) bool {
+	data, err := json.Marshal(v)
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, APIResponse{Error: "json marshal"})
+		return true
+	}
+	hash := md5.Sum(data)
+	etag := "\"" + hex.EncodeToString(hash[:8]) + "\""
+
+	if match := r.Header.Get("If-None-Match"); match == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return true
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", maxAge))
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
+	return false
 }

@@ -74,7 +74,7 @@ Same for comments: send `edit` or `delete` to `blog+<comment_id>@domain`.
 Declare options at the beginning of the email body:
 
 ```
----
+---config
 banner: 2
 slug: my-post
 notify: on
@@ -105,10 +105,11 @@ Read-only JSON API for building custom frontends. See [docs/api.md](docs/api.md)
 
 | Endpoint | Description |
 |---|---|
-| `GET /api/site` | Site information |
-| `GET /api/articles` | All articles |
+| `GET /api/site` | Site information (includes theme.json) |
+| `GET /api/articles` | Paginated articles |
 | `GET /api/article/{id}` | Article detail (by hash or slug) |
 | `GET /api/article/{id}/comments` | Article comments |
+| `GET /api/locale?lang=zh` | Merged locale strings |
 | `POST /api/article` | Create article |
 | `POST /api/comment` | Create comment |
 | `POST /api/raw-email` | Webhook: receive raw email |
@@ -118,7 +119,13 @@ Read-only JSON API for building custom frontends. See [docs/api.md](docs/api.md)
 Themes control the entire frontend. Set `theme` in config.yaml:
 
 ```yaml
+# Single theme
 theme: default
+
+# Per-language themes (requires site.auto_lang: true)
+theme:
+  en: default
+  zh: default
 ```
 
 Theme files go in `themes/<name>/`. See [docs/themes.md](docs/themes.md) for the full theme authoring guide.
@@ -144,9 +151,16 @@ site:
   lang: en
   show_author: true
   width: 600
+  # auto_lang: false       # detect browser language for per-language themes
+  # links:                 # navigation links in header
+  #   - title: "About"
+  #     url: "/about"
 
 web:
   port: 8080
+  scheme: https
+
+theme: default              # or per-language map (see Themes section)
 
 privacy:
   hide_email: true
@@ -154,9 +168,12 @@ privacy:
 history:
   article:
     keep: true
+    visible: true
   comment:
     keep: true
+    visible: true
   show_deleted: true
+  show_replies: true
 ```
 
 All config fields are hot-reloadable — edit `config.yaml` and changes take effect immediately.

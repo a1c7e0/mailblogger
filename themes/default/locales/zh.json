@@ -12,5 +12,13 @@
   "page_of": "第 {{page}} 页，共 {{total}} 页",
   "newer": "\u2190 较新",
   "older": "较旧 \u2192",
-  "write_reply": "在上方写回复，只有上方内容会被保存。"
+  "write_reply": "在上方写回复，只有上方内容会被保存。",
+  "not_found": "未找到",
+  "article_not_found": "文章不存在。",
+  "copied": "[已复制]",
+  "copy_error": "[错误]",
+  "lang_auto": "自动",
+  "theme_auto": "自动",
+  "theme_light": "浅色",
+  "theme_dark": "深色"
 }

@@ -358,16 +358,18 @@ func TestRawEmailFullPipeline(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("list articles: status = %d", w.Code)
 	}
-	var articles []map[string]interface{}
-	json.NewDecoder(w.Body).Decode(&articles)
-	if len(articles) != 1 {
-		t.Fatalf("list articles: got %d, want 1", len(articles))
+	var listResp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&listResp)
+	articles, ok := listResp["articles"].([]interface{})
+	if !ok || len(articles) != 1 {
+		t.Fatalf("list articles: got %v, want 1", listResp["articles"])
 	}
-	if articles[0]["uniqueid"] != articleID {
-		t.Errorf("article id = %v, want %s", articles[0]["uniqueid"], articleID)
+	art := articles[0].(map[string]interface{})
+	if art["uniqueid"] != articleID {
+		t.Errorf("article id = %v, want %s", art["uniqueid"], articleID)
 	}
-	if articles[0]["subject"] != "Integration Test Article" {
-		t.Errorf("subject = %v, want Integration Test Article", articles[0]["subject"])
+	if art["subject"] != "Integration Test Article" {
+		t.Errorf("subject = %v, want Integration Test Article", art["subject"])
 	}
 
 	// Step 3: Verify article detail

@@ -109,6 +109,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/articles", s.handleAPIArticles)
 	mux.HandleFunc("GET /api/article/{id}", s.handleAPIArticleDetail)
 	mux.HandleFunc("GET /api/article/{id}/comments", s.handleAPIArticleComments)
+	mux.HandleFunc("GET /api/locale", s.handleAPILocale)
 	// Existing API endpoints
 	mux.HandleFunc("/api/status", s.handleAPIStatus)
 	mux.HandleFunc("/api/article", s.handleAPIArticle)

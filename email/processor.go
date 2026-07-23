@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"mailblogger/blog"
+	"mailblogger/config"
 )
 
 var plusRe = regexp.MustCompile(`^([^+]+)\+([^@]+)@.+$`)
@@ -30,9 +31,10 @@ type Processor struct {
 	Scheme      string
 	Whitelist   []string
 	Sender      *SMTPSender
+	DKIMPolicy  config.DKIMPolicy
 }
 
-func NewProcessor(store *blog.Store, emailLocal, emailDomain, host, scheme string, whitelist []string, sender *SMTPSender) *Processor {
+func NewProcessor(store *blog.Store, emailLocal, emailDomain, host, scheme string, whitelist []string, sender *SMTPSender, dkimPolicy config.DKIMPolicy) *Processor {
 	return &Processor{
 		Store:       store,
 		EmailLocal:  emailLocal,
@@ -41,11 +43,15 @@ func NewProcessor(store *blog.Store, emailLocal, emailDomain, host, scheme strin
 		Scheme:      scheme,
 		Whitelist:   whitelist,
 		Sender:      sender,
+		DKIMPolicy:  dkimPolicy,
 	}
 }
 
 func (p *Processor) ProcessMessage(raw *RawMessage) error {
-	if raw.RawBody != nil {
+	// Parse target ID early so DKIM policy can differ for articles vs comments
+	targetUID := p.parseTargetID(raw.To)
+
+	if raw.RawBody != nil && p.DKIMPolicy != config.DKIMNone {
 		ok, domain, err := VerifyDKIM(raw.RawBody)
 		if err != nil {
 			log.Printf("DKIM: %s = error (%v)", domain, err)
@@ -55,9 +61,15 @@ func (p *Processor) ProcessMessage(raw *RawMessage) error {
 		if ok {
 			log.Printf("DKIM: %s = pass", domain)
 		} else if domain != "" {
+			// Invalid signature — always reject (normal + strict)
 			log.Printf("DKIM: %s = fail, rejected", domain)
 			p.sendErrorReply(raw, fmt.Sprintf("Email rejected: DKIM signature invalid for %s.", domain))
 			return fmt.Errorf("DKIM signature invalid for %s", domain)
+		} else if p.DKIMPolicy == config.DKIMStrict && targetUID != "" {
+			// Strict mode: reject unsigned comments (articles protected by whitelist)
+			log.Printf("DKIM: unsigned comment rejected (strict mode)")
+			p.sendErrorReply(raw, "Email rejected: DKIM signature required for comments.")
+			return fmt.Errorf("DKIM signature required (strict mode)")
 		}
 	}
 
@@ -72,7 +84,6 @@ func (p *Processor) ProcessMessage(raw *RawMessage) error {
 		return nil
 	}
 
-	targetUID := p.parseTargetID(raw.To)
 	if targetUID == "" {
 		return p.processArticle(raw)
 	}
@@ -180,6 +191,12 @@ func genID(raw *RawMessage, addr string, extra string) string {
 	return blog.GenUniqueID(idInput + extra)
 }
 
+var configBlockRe = regexp.MustCompile(`^-{3,}config\s*$`)
+
+func isConfigBlockStart(s string) bool {
+	return configBlockRe.MatchString(strings.TrimSpace(s))
+}
+
 func isDashLine(s string) bool {
 	s = strings.TrimSpace(s)
 	if len(s) < 3 {
@@ -202,7 +219,7 @@ var knownConfigKeys = map[string]bool{
 
 func parseBodyConfig(body string) (cfg map[string]string, cleanBody string, err error) {
 	lines := strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n")
-	if len(lines) < 3 || !isDashLine(lines[0]) {
+	if len(lines) < 3 || !isConfigBlockStart(lines[0]) {
 		return nil, body, nil
 	}
 
@@ -339,6 +356,16 @@ func stripNotifyTags(subject string) string {
 func sanitize(s string) string {
 	s = strings.ReplaceAll(s, "\r\n", " ")
 	return strings.ReplaceAll(s, "\n", " ")
+}
+
+// replaceCIDInBody replaces all CID image references in the body with image numbers.
+// Handles both markdown image syntax ![...](cid:xxx) and bare cid:xxx references.
+func replaceCIDInBody(body string, cidMap map[string]string) string {
+	for cid, num := range cidMap {
+		body = strings.ReplaceAll(body, "![image](cid:"+cid+")", num)
+		body = strings.ReplaceAll(body, "cid:"+cid, num)
+	}
+	return body
 }
 
 func buildEmailMessage(from, to, subject, replyTo, body string) string {

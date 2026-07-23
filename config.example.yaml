@@ -1,3 +1,6 @@
+# MailBlogger Configuration
+# Copy to config.yaml and edit. All fields are hot-reloadable.
+
 mail:
   address: blog@example.com
   imap:
@@ -14,27 +17,45 @@ mail:
   notify:
     article: true
     comment: false
+  dkim: normal           # none = skip DKIM; normal = reject invalid, allow unsigned; strict = reject unsigned for comments
 
 content_dir: content
 
 site:
-  title: My Blog
-  subtitle: ""
-  description: ""
-  lang: en
-  footer_html: ""
-  show_author: true
-  links:
-    - title: About
-      url: /about
+  lang: en               # site language (default: en)
+  show_author: true       # show author names on articles
+  width: 600              # max content width in pixels (default: 600)
+  auto_lang: false        # detect browser language, serve per-language theme
+  # links:               # navigation links shown in header
+  #   - title: "About"
+  #     url: "/about"
+  #   - title: "GitHub"
+  #     url: "https://github.com/..."
 
 web:
   port: 8080
   host: 0.0.0.0
-  scheme: https
+  scheme: https           # base URL scheme for feeds/sitemap (default: https)
 
 privacy:
-  hide_email: true
+  hide_email: true        # hide author emails from visitors
+
+# History and versioning
+history:
+  article:
+    keep: true            # archive old versions when edited
+    visible: true         # show edit history links on articles
+  comment:
+    keep: true            # archive old versions when edited
+    visible: true         # show edit history on comments
+  show_deleted: true      # show deleted articles/comments with [deleted] marker
+  show_replies: true      # show reply chains in comment threads
+
+# Theme: string for single theme, or map for per-language themes
+theme: default
+# theme:
+#   en: default
+#   zh: default
 
 # Cloudflare Email Worker webhook secret
 # Set the same value in your Worker's environment variables

@@ -35,13 +35,13 @@ All files in the theme directory are served at the root URL. For example, `theme
 
 1. Browser requests `/` or `/hello-world`
 2. Server serves `themes/<name>/index.html` (the SPA shell)
-3. `app.js` loads, fetches data from the JSON API (`/api/site`, `/api/articles`, `/api/article/{id}`, etc.)
+3. `app.js` loads, fetches data from the JSON API
 4. JavaScript renders the page client-side
 5. Internal link clicks are intercepted — `app.js` fetches new data and updates the DOM without full page reload
 
 ## theme.json
 
-Theme metadata, loaded by `app.js` at startup.
+Theme metadata. Merged into the `/api/site` response — no separate fetch needed.
 
 ```json
 {
@@ -52,17 +52,23 @@ Theme metadata, loaded by `app.js` at startup.
 }
 ```
 
-All fields are optional. `footer_html` can be inline HTML or a file path (e.g., `"/footer.html"` — fetched via `fetch()`).
+All fields are optional. Config fields in `site.*` take precedence over theme.json. `footer_html` can be inline HTML or a file path (e.g., `"/footer.html"` — fetched via `fetch()`).
 
-## Locale Files
+## Locale API
 
-Multi-language string overrides. Loaded in order:
+Locale strings are served by `GET /api/locale?lang=zh`. The backend merges the requested language on top of English as fallback — theme authors don't need to handle locale loading logic.
 
-1. `theme.json` — base values
-2. `locales/{lang}.json` — language-specific overrides
-3. `locales/en.json` — English fallback
+```
+GET /api/site       → site config + theme.json fields
+GET /api/locale?lang=zh → all locale strings (en base + zh overrides)
+```
 
-Standard keys used by the default theme:
+Theme code loads locale with a single fetch:
+```javascript
+var locale = await (await fetch('/api/locale?lang=zh')).json();
+```
+
+Standard locale keys used by the default theme:
 
 ```json
 {
@@ -79,7 +85,15 @@ Standard keys used by the default theme:
   "page_of": "Page {{page}} of {{total}}",
   "newer": "← Newer",
   "older": "Older →",
-  "write_reply": "Write your reply above this line. Only text above will be saved."
+  "write_reply": "Write your reply above this line. Only text above will be saved.",
+  "not_found": "Not Found",
+  "article_not_found": "Article not found.",
+  "copied": "[copied]",
+  "copy_error": "[error]",
+  "lang_auto": "Auto",
+  "theme_auto": "Auto",
+  "theme_light": "Light",
+  "theme_dark": "Dark"
 }
 ```
 
@@ -109,29 +123,37 @@ Use `{{variable}}` syntax for interpolation. Theme code accesses strings via `t(
 ```
 
 **app.js** needs to:
-1. Fetch `/api/site` for site configuration
-2. Route based on `window.location.pathname`
-3. Fetch `/api/articles` for the index page
-4. Fetch `/api/article/{id}` and `/api/article/{id}/comments` for article pages
-5. Intercept internal link clicks for SPA navigation
+1. Fetch `/api/site` for site configuration (includes theme.json fields)
+2. Fetch `/api/locale?lang=xx` for locale strings
+3. Route based on `window.location.pathname`
+4. Fetch `/api/articles` for the index page (paginated, see API docs)
+5. Fetch `/api/article/{id}` for article pages (includes `body_html`)
+6. Fetch `/api/article/{id}/comments` or use `?include=comments`
+7. Intercept internal link clicks for SPA navigation
 
 ### API Data Shapes
 
 **Site** (`GET /api/site`):
 ```
-lang, show_author, avatar, width, links[], email_local, email_domain
+lang, show_author, avatar, width, links[], email_local, email_domain,
+title, subtitle, description, footer_html (from theme.json)
 ```
 
-**Article summary** (`GET /api/articles`):
-```
-uniqueid, slug, subject, author, author_hash, date, banner, excerpt
+**Articles** (`GET /api/articles`):
+```json
+{
+  "articles": [{ uniqueid, slug, subject, author, author_hash, date, banner, excerpt }],
+  "total": 42, "page": 1, "per_page": 20, "total_pages": 3
+}
 ```
 
 **Article detail** (`GET /api/article/{id}`):
 ```
 uniqueid, slug, subject, author, author_hash, author_email, date,
-banner, body, images[], email_local, email_domain
+banner, body, body_html, images[], email_local, email_domain
 ```
+
+Use `body_html` (server-rendered HTML) instead of client-side markdown rendering when possible. The backend uses goldmark with GFM + footnotes + definition lists.
 
 **Comment** (`GET /api/article/{id}/comments`):
 ```
@@ -143,9 +165,9 @@ body, deleted, edits[]
 
 ```javascript
 document.addEventListener('click', function(e) {
-  const a = e.target.closest('a');
+  var a = e.target.closest('a');
   if (!a) return;
-  const href = a.getAttribute('href');
+  var href = a.getAttribute('href');
   // Skip external links, mailto, anchors, static files, feeds
   if (href.startsWith('http') || href.startsWith('mailto:') ||
       href.startsWith('#') || href.startsWith('/static/') ||

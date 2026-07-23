@@ -205,13 +205,13 @@ func TestParseBodyConfig(t *testing.T) {
 	}{
 		{
 			name:     "config with banner",
-			input:    "---\nbanner: 1\n---\n\nHello world",
+			input:    "---config\nbanner: 1\n---\n\nHello world",
 			wantCfg:  map[string]string{"banner": "1"},
 			wantBody: "Hello world",
 		},
 		{
 			name:     "config with slug and banner",
-			input:    "---\nslug: my-post\nbanner: 2\n---\n\nBody here",
+			input:    "---config\nslug: my-post\nbanner: 2\n---\n\nBody here",
 			wantCfg:  map[string]string{"slug": "my-post", "banner": "2"},
 			wantBody: "Body here",
 		},
@@ -241,19 +241,19 @@ func TestParseBodyConfig(t *testing.T) {
 		},
 		{
 			name:     "empty config block",
-			input:    "---\n---\n\nBody",
+			input:    "---config\n---\n\nBody",
 			wantCfg:  nil,
-			wantBody: "---\n---\n\nBody",
+			wantBody: "---config\n---\n\nBody",
 		},
 		{
 			name:     "config with empty lines",
-			input:    "---\nbanner: 1\n\nslug: test\n---\n\nBody",
+			input:    "---config\nbanner: 1\n\nslug: test\n---\n\nBody",
 			wantCfg:  map[string]string{"banner": "1", "slug": "test"},
 			wantBody: "Body",
 		},
 		{
 			name:     "config with value containing colon",
-			input:    "---\nslug: my-post\n---\n\nTime is 10:30",
+			input:    "---config\nslug: my-post\n---\n\nTime is 10:30",
 			wantCfg:  map[string]string{"slug": "my-post"},
 			wantBody: "Time is 10:30",
 		},
@@ -265,13 +265,13 @@ func TestParseBodyConfig(t *testing.T) {
 		},
 		{
 			name:     "5 dashes",
-			input:    "-----\nbanner: 1\n-----\n\nBody",
+			input:    "-----config\nbanner: 1\n-----\n\nBody",
 			wantCfg:  map[string]string{"banner": "1"},
 			wantBody: "Body",
 		},
 		{
 			name:     "notify and banner",
-			input:    "---\nnotify: true\nbanner: 3\n---\n\nBody",
+			input:    "---config\nnotify: true\nbanner: 3\n---\n\nBody",
 			wantCfg:  map[string]string{"notify": "true", "banner": "3"},
 			wantBody: "Body",
 		},
@@ -283,7 +283,7 @@ func TestParseBodyConfig(t *testing.T) {
 		},
 		{
 			name:     "dashes with spaces",
-			input:    "--- \nbanner: 1\n ---\n\nBody",
+			input:    "---config\nbanner: 1\n---\n\nBody",
 			wantCfg:  map[string]string{"banner": "1"},
 			wantBody: "Body",
 		},
@@ -295,21 +295,21 @@ func TestParseBodyConfig(t *testing.T) {
 		},
 		{
 			name:     "mixed known and unknown keys",
-			input:    "---\nbanner: 1\nunknown: val\n---\n\nBody",
+			input:    "---config\nbanner: 1\nunknown: val\n---\n\nBody",
 			wantCfg:  nil,
-			wantBody: "---\nbanner: 1\nunknown: val\n---\n\nBody",
+			wantBody: "---config\nbanner: 1\nunknown: val\n---\n\nBody",
 		},
 		{
 			name:     "notify only",
-			input:    "---\nnotify: on\n---\n\nBody",
+			input:    "---config\nnotify: on\n---\n\nBody",
 			wantCfg:  map[string]string{"notify": "on"},
 			wantBody: "Body",
 		},
 		{
 			name:     "unclosed block with known key",
-			input:    "---\nbanner: 1\n\nBody without closing",
+			input:    "---config\nbanner: 1\n\nBody without closing",
 			wantCfg:  nil,
-			wantBody: "---\nbanner: 1\n\nBody without closing",
+			wantBody: "---config\nbanner: 1\n\nBody without closing",
 		},
 	}
 	for _, tt := range tests {

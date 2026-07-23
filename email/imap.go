@@ -374,26 +374,29 @@ func stripEmailQuotes(body string) string {
 	return body
 }
 
-var htmlStripRe = regexp.MustCompile(`(?i)<(html|body|head|meta[^>]*|!DOCTYPE[^>]*|\?xml[^>]*)\b[^>]*>`)
+var imgCIDRe = regexp.MustCompile(`(?i)<img\b[^>]*src="cid:([^"]+)"[^>]*>`)
 var htmlImgNoAltRe = regexp.MustCompile(`(?i)<img\b[^>]*src="([^"]+)"[^>]*>`)
+var htmlTagRe = regexp.MustCompile(`(?i)</?(?:div|p|br|hr|h[1-6]|li|ul|ol|blockquote|pre|table|tr|td|th|thead|tbody|section|article|header|footer|nav|aside|figure|figcaption|dl|dt|dd)[^>]*>`)
+var htmlAnyTagRe = regexp.MustCompile(`<[^>]+>`)
 
 func htmlToMarkdown(html string) string {
 	text := html
-	text = htmlStripRe.ReplaceAllString(text, "")
-	text = strings.ReplaceAll(text, "</html>", "")
-	text = strings.ReplaceAll(text, "</body>", "")
-	text = strings.ReplaceAll(text, "</head>", "")
+	// Step 1: Convert CID image tags to markdown (preserve for later CID replacement)
+	text = imgCIDRe.ReplaceAllString(text, "![image](cid:$1)")
+	// Step 2: Convert remaining image tags
 	text = imgTagRe.ReplaceAllString(text, "![$2]($1)")
 	text = htmlImgNoAltRe.ReplaceAllString(text, "![image]($1)")
-	text = strings.ReplaceAll(text, "<br>", "\n")
-	text = strings.ReplaceAll(text, "<br/>", "\n")
-	text = strings.ReplaceAll(text, "<br />", "\n")
-	text = strings.ReplaceAll(text, "<p>", "\n")
-	text = strings.ReplaceAll(text, "</p>", "\n")
+	// Step 3: Convert block elements to newlines
+	text = htmlTagRe.ReplaceAllString(text, "\n")
+	// Step 4: Strip all remaining HTML tags
+	text = htmlAnyTagRe.ReplaceAllString(text, "")
+	// Step 5: Decode HTML entities
 	text = strings.ReplaceAll(text, "&lt;", "<")
 	text = strings.ReplaceAll(text, "&gt;", ">")
 	text = strings.ReplaceAll(text, "&amp;", "&")
 	text = strings.ReplaceAll(text, "&quot;", "\"")
+	text = strings.ReplaceAll(text, "&nbsp;", " ")
+	// Step 6: Collapse excessive newlines
 	for {
 		newText := strings.ReplaceAll(text, "\n\n\n", "\n\n")
 		if newText == text {

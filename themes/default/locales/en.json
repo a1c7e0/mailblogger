@@ -12,5 +12,13 @@
   "page_of": "Page {{page}} of {{total}}",
   "newer": "\u2190 Newer",
   "older": "Older \u2192",
-  "write_reply": "Write your reply above this line. Only text above will be saved."
+  "write_reply": "Write your reply above this line. Only text above will be saved.",
+  "not_found": "Not Found",
+  "article_not_found": "Article not found.",
+  "copied": "[copied]",
+  "copy_error": "[error]",
+  "lang_auto": "Auto",
+  "theme_auto": "Auto",
+  "theme_light": "Light",
+  "theme_dark": "Dark"
 }

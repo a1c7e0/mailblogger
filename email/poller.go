@@ -76,7 +76,7 @@ func (p *Poller) Start() {
 		}
 
 		cfg := p.ConfigGetter()
-		processor := NewProcessor(p.Store, cfg.EmailLocal, cfg.EmailDomain, cfg.Host, cfg.Web.Scheme, cfg.Mail.Whitelist, p.Sender)
+		processor := NewProcessor(p.Store, cfg.EmailLocal, cfg.EmailDomain, cfg.Host, cfg.Web.Scheme, cfg.Mail.Whitelist, p.Sender, cfg.Mail.DKIM)
 
 		imapCfg := Config{
 			Server:   cfg.Mail.IMAP.Server,

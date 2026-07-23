@@ -69,7 +69,10 @@ func (p *Processor) processComment(raw *RawMessage, targetID string) error {
 	}
 
 	if len(raw.Images) > 0 {
-		saveCommentImages(p.Store, parentID, uniqueID, raw.Images)
+		_, cidMap := saveCommentImages(p.Store, parentID, uniqueID, raw.Images)
+		if len(cidMap) > 0 {
+			comment.Body = replaceCIDInBody(comment.Body, cidMap)
+		}
 	}
 
 	if err := p.Store.SaveComment(comment); err != nil {

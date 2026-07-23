@@ -23,6 +23,7 @@ mail:
   notify:
     article: true                 # notify authors about comments
     comment: false                # notify commenters about replies
+  dkim: normal                    # none | normal | strict
 
 content_dir: content
 
@@ -78,6 +79,7 @@ theme: default                    # or map of language → theme directory
 | `history.*.visible` | `true` |
 | `history.show_deleted` | `true` |
 | `history.show_replies` | `true` |
+| `mail.dkim` | `normal` |
 
 ## Address Parsing
 

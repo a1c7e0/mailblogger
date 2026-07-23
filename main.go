@@ -80,7 +80,7 @@ func runFetch(cfg *config.Config, store *blog.Store) {
 		sender = email.NewSMTPSender(cfg.Mail.SMTP.Server, cfg.Mail.SMTP.Port, cfg.Mail.SMTP.Username, cfg.Mail.SMTP.Password)
 	}
 
-	processor := email.NewProcessor(store, cfg.EmailLocal, cfg.EmailDomain, cfg.Host, cfg.Web.Scheme, cfg.Mail.Whitelist, sender)
+	processor := email.NewProcessor(store, cfg.EmailLocal, cfg.EmailDomain, cfg.Host, cfg.Web.Scheme, cfg.Mail.Whitelist, sender, cfg.Mail.DKIM)
 
 	if err := email.FetchOnce(imapCfg, processor); err != nil {
 		log.Fatalf("fetch: %v", err)

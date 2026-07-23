@@ -23,11 +23,6 @@ func (p *Processor) processArticle(raw *RawMessage) error {
 	date, _ := parseEmailDate(raw.Date)
 	cleanSubj := cleanSubject(raw.Subject)
 	slug := ""
-	if slug != "" {
-		if _, err := p.Store.FindBySlug(slug); err == nil {
-			return p.sendErrorReply(raw, fmt.Sprintf("Slug %q is already in use.", slug))
-		}
-	}
 
 	cleanSubj = stripNotifyTags(cleanSubj)
 
@@ -35,7 +30,7 @@ func (p *Processor) processArticle(raw *RawMessage) error {
 	banner := ""
 	notifyTag := ""
 	if bodyCfg != nil {
-		if s, ok := bodyCfg["slug"]; ok && slug == "" {
+		if s, ok := bodyCfg["slug"]; ok {
 			s = strings.ToLower(strings.TrimSpace(s))
 			if !validSlugRe.MatchString(s) {
 				return p.sendErrorReply(raw, fmt.Sprintf("Invalid slug %q. Use lowercase letters, digits, dashes only.", s))
@@ -90,13 +85,12 @@ func (p *Processor) processArticle(raw *RawMessage) error {
 
 	if len(raw.Images) > 0 {
 		_, cidMap := saveArticleImages(p.Store, uniqueID, raw.Images, articleDir)
-		if len(cidMap) > 0 && !strings.Contains(article.Body, "![") {
-			if raw.HTMLBody != "" {
-				article.Body = htmlToMarkdown(raw.HTMLBody)
+		if len(cidMap) > 0 {
+			// Prefer plain text; if empty, convert HTML (which preserves CID image tags)
+			if strings.TrimSpace(body) == "" && raw.HTMLBody != "" {
+				body = htmlToMarkdown(raw.HTMLBody)
 			}
-		}
-		for cid, num := range cidMap {
-			article.Body = strings.ReplaceAll(article.Body, "cid:"+cid, num)
+			body = replaceCIDInBody(body, cidMap)
 		}
 	}
 
@@ -171,13 +165,11 @@ func (p *Processor) handleEditCommand(raw *RawMessage, article *blog.Article) er
 
 	if len(raw.Images) > 0 {
 		_, cidMap := saveArticleImages(p.Store, article.UniqueID, raw.Images, articleDir)
-		if len(cidMap) > 0 && !strings.Contains(body, "![") {
-			if raw.HTMLBody != "" {
+		if len(cidMap) > 0 {
+			if strings.TrimSpace(body) == "" && raw.HTMLBody != "" {
 				body = htmlToMarkdown(raw.HTMLBody)
 			}
-		}
-		for cid, num := range cidMap {
-			body = strings.ReplaceAll(body, "cid:"+cid, num)
+			body = replaceCIDInBody(body, cidMap)
 		}
 	}
 

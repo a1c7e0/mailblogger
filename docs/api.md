@@ -2,11 +2,23 @@
 
 All endpoints return `Content-Type: application/json`.
 
+## Caching
+
+All GET endpoints include `ETag` and `Cache-Control` headers. Clients sending `If-None-Match` receive `304 Not Modified` when the response hasn't changed.
+
+| Endpoint | max-age |
+|---|---|
+| `/api/site` | 10s |
+| `/api/articles` | 5s |
+| `/api/article/{id}` | 5s |
+| `/api/article/{id}/comments` | 3s |
+| `/api/locale` | 30s |
+
 ## Read Endpoints
 
 ### GET /api/site
 
-Site configuration.
+Site configuration merged with theme.json fields.
 
 ```json
 {
@@ -16,27 +28,47 @@ Site configuration.
   "width": 600,
   "links": [{"Title": "About", "URL": "/about"}],
   "email_local": "blog",
-  "email_domain": "example.com"
+  "email_domain": "example.com",
+  "title": "My Blog",
+  "subtitle": "Email-to-blog",
+  "description": "Send an email, it becomes a post.",
+  "footer_html": ""
 }
 ```
 
+Fields from theme.json (`title`, `subtitle`, `description`, `footer_html`, etc.) are merged into the response. Config fields take precedence over theme.json.
+
 ### GET /api/articles
 
-All articles, sorted by date descending.
+Paginated articles, sorted by date descending.
 
+**Query parameters:**
+
+| Param | Default | Max | Description |
+|---|---|---|---|
+| `page` | 1 | - | Page number |
+| `per_page` | 20 | 100 | Items per page |
+
+**Response:**
 ```json
-[
-  {
-    "uniqueid": "afd888d6",
-    "slug": "hello-world",
-    "subject": "Hello World",
-    "author": "Alice",
-    "author_hash": "ff8d9819",
-    "date": "2026-07-12T12:00:00Z",
-    "banner": "2",
-    "excerpt": "Hello World This is the post body..."
-  }
-]
+{
+  "articles": [
+    {
+      "uniqueid": "afd888d6",
+      "slug": "hello-world",
+      "subject": "Hello World",
+      "author": "Alice",
+      "author_hash": "ff8d9819",
+      "date": "2026-07-12T12:00:00Z",
+      "banner": "2",
+      "excerpt": "Hello World This is the post body..."
+    }
+  ],
+  "total": 42,
+  "page": 1,
+  "per_page": 20,
+  "total_pages": 3
+}
 ```
 
 `excerpt`: markdown-stripped, truncated to 160 chars.
@@ -45,6 +77,14 @@ All articles, sorted by date descending.
 
 Article detail. `{id}` can be hash or slug.
 
+**Query parameters:**
+
+| Param | Default | Description |
+|---|---|---|
+| `include` | - | Set to `comments` to embed comments in response |
+| `comments_limit` | 50 | Max comments when `include=comments` (max 200) |
+
+**Response:**
 ```json
 {
   "uniqueid": "afd888d6",
@@ -56,11 +96,25 @@ Article detail. `{id}` can be hash or slug.
   "date": "2026-07-12T12:00:00Z",
   "banner": "2",
   "body": "Markdown content...",
+  "body_html": "<p>Rendered HTML...</p>",
   "images": ["1.webp", "2.gif"],
   "email_local": "blog",
   "email_domain": "example.com"
 }
 ```
+
+`body_html`: server-rendered HTML from goldmark (GFM + footnotes + definition lists). Use this instead of client-side markdown rendering when possible.
+
+With `?include=comments`:
+```json
+{
+  "...": "...",
+  "comments": [ ... ],
+  "comments_total": 53
+}
+```
+
+When `comments_total` exceeds `comments_limit`, only the first N comments are returned.
 
 ### GET /api/article/{id}/comments
 
@@ -80,6 +134,28 @@ Comments for an article. Filtered by `history.show_deleted` and `history.show_re
     "edits": []
   }
 ]
+```
+
+### GET /api/locale
+
+Merged locale strings for the given language (with English fallback).
+
+**Query parameters:**
+
+| Param | Default | Description |
+|---|---|---|
+| `lang` | `site.lang` | Language code (e.g. `zh`, `en`) |
+
+**Response:** flat key-value object of all locale strings, English as base with requested language merged on top.
+
+```json
+{
+  "comments": "评论",
+  "reply": "[回复]",
+  "back_to_index": "← 返回首页",
+  "not_found": "未找到",
+  "theme_auto": "自动"
+}
 ```
 
 ### GET /api/status
@@ -184,16 +260,19 @@ All endpoints return errors as:
 ## Usage Examples
 
 ```bash
+# List articles (paginated)
+curl 'http://localhost:8080/api/articles?page=1&per_page=10'
+
+# Get article with embedded comments
+curl 'http://localhost:8080/api/article/afd888d6?include=comments'
+
+# Get locale strings
+curl 'http://localhost:8080/api/locale?lang=zh'
+
 # Create article
 curl -X POST http://localhost:8080/api/article \
   -H 'Content-Type: application/json' \
   -d '{"from":"Alice <alice@example.com>","subject":"Hello","body":"World"}'
-
-# List articles
-curl http://localhost:8080/api/articles
-
-# Get article detail
-curl http://localhost:8080/api/article/afd888d6
 
 # Create comment
 curl -X POST http://localhost:8080/api/comment \
