@@ -112,6 +112,7 @@
     if (!href) return false;
     if (href.startsWith('mailto:') || href.startsWith('http') || href.startsWith('/feed') || href.startsWith('/static/')) return false;
     if (link.hasAttribute('target') && link.getAttribute('target') === '_blank') return false;
+    if (/\.\w{2,5}$/.test(href)) return false;
     return true;
   }
 

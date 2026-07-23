@@ -252,6 +252,7 @@ func (s *Server) handleAPIArticleDetail(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	images, _ := s.Store.ListImages(article.UniqueID)
+	format := r.URL.Query().Get("format")
 
 	resp := map[string]interface{}{
 		"uniqueid":     article.UniqueID,
@@ -262,11 +263,22 @@ func (s *Server) handleAPIArticleDetail(w http.ResponseWriter, r *http.Request) 
 		"author_email": article.AuthorEmail,
 		"date":         article.Date.Format(time.RFC3339),
 		"banner":       article.Banner,
-		"body":         article.Body,
-		"body_html":    string(renderMarkdown(article.Body)),
 		"images":       images,
 		"email_local":  s.EmailLocal,
 		"email_domain": s.EmailDomain,
+	}
+
+	switch format {
+	case "meta":
+		// metadata only — no body content
+	case "html":
+		resp["body_html"] = string(renderMarkdown(article.Body))
+	case "md":
+		resp["body"] = article.Body
+	default:
+		// full output (backward compatible)
+		resp["body"] = article.Body
+		resp["body_html"] = string(renderMarkdown(article.Body))
 	}
 
 	// Optionally include comments

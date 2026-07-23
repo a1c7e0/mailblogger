@@ -412,14 +412,6 @@ func (s *Server) serveExistingArticleFile(w http.ResponseWriter, r *http.Request
 			return false
 		}
 	}
-	if !strings.Contains(filename, ".") {
-		entries, err := filepath.Glob(filepath.Join(dir, filename+".*"))
-		if err != nil || len(entries) == 0 {
-			return false
-		}
-		http.ServeFile(w, r, entries[0])
-		return true
-	}
 	filePath := filepath.Join(dir, filename)
 	if info, err := os.Stat(filePath); err != nil || info.IsDir() {
 		return false

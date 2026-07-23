@@ -76,15 +76,14 @@ Paginated articles, sorted by date descending.
 ### GET /api/article/{id}
 
 Article detail. `{id}` can be hash or slug.
-
 **Query parameters:**
-
 | Param | Default | Description |
 |---|---|---|
+| `format` | - | `meta`: metadata only (no body); `html`: pre-rendered HTML only; `md`: raw markdown only; omitted: both (backward compatible) |
 | `include` | - | Set to `comments` to embed comments in response |
 | `comments_limit` | 50 | Max comments when `include=comments` (max 200) |
 
-**Response:**
+**Response (default, no format param):**
 ```json
 {
   "uniqueid": "afd888d6",
@@ -103,7 +102,42 @@ Article detail. `{id}` can be hash or slug.
 }
 ```
 
-`body_html`: server-rendered HTML from Goldmark (GFM + footnotes + definition lists). Use this instead of client-side markdown rendering when possible. Fenced code blocks include `.code-block`, `.code-block-header`, and `.code-copy-btn[data-code-copy]` markup; a client theme can attach its own clipboard behavior.
+**`?format=meta`** — metadata only, no body content:
+```json
+{
+  "uniqueid": "afd888d6",
+  "slug": "hello-world",
+  "subject": "Hello World",
+  "author": "Alice",
+  "author_hash": "ff8d9819",
+  "author_email": "alice@example.com",
+  "date": "2026-07-12T12:00:00Z",
+  "banner": "2",
+  "images": ["1.webp", "2.gif"],
+  "email_local": "blog",
+  "email_domain": "example.com"
+}
+```
+
+**`?format=html`** — server-rendered HTML only, no raw markdown:
+```json
+{
+  "uniqueid": "afd888d6",
+  "...": "...",
+  "body_html": "<p>Rendered HTML...</p>"
+}
+```
+
+**`?format=md`** — raw markdown only, no rendered HTML:
+```json
+{
+  "uniqueid": "afd888d6",
+  "...": "...",
+  "body": "Markdown content..."
+}
+```
+
+`body_html`: server-rendered HTML from Goldmark (GFM + footnotes + definition lists + typographer). Use this instead of client-side markdown rendering when possible. Fenced code blocks include `.code-block`, `.code-block-header`, and `.code-copy-btn[data-code-copy]` markup; a client theme can attach its own clipboard behavior.
 
 With `?include=comments`:
 ```json
